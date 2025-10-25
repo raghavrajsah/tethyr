@@ -49,7 +49,7 @@ class Camera:
         self.is_running = False
         if self.camera:
             self.camera.release()
-
+            
 # Global camera instance
 camera = Camera()
 
