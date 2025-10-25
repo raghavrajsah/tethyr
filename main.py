@@ -14,6 +14,8 @@ from PIL import Image
 from websockets import ConnectionClosed
 from websockets.asyncio.server import ServerConnection, serve
 
+from grounding import Grounding
+
 logger.add(
     "logs/server.log",
     rotation="100 MB",
@@ -135,6 +137,9 @@ class ClientState:
 
 clients: dict[str, ClientState] = {}
 
+# Global grounding model instance
+grounding_model: Grounding | None = None
+
 
 def setup_output_directory(client_id: str) -> Path:
     """
@@ -207,50 +212,76 @@ def save_audio_buffer(client_state: ClientState) -> None:
         logger.error(f"Error saving audio for client {client_state.client_id}: {e}")
 
 
-def process_video_frame(image: Image.Image, frame_info: dict) -> ServerMessage | None:
+def process_video_frame(image: Image.Image, frame_info: dict) -> list[ServerMessage]:
     """
-    PLACEHOLDER: Process video frame and return instruction
+    Process video frame using YOLO grounding model and return bounding box instructions
 
     Args:
         image: PIL Image object
         frame_info: Dictionary with frame metadata (frame_number, resolution, timestamp)
 
     Returns:
-        ServerMessage or None
-
-    TODO: Replace with your actual video processing logic:
-    - Object detection (YOLO etc.)
-    - Scene understanding
-    - Visual question answering
-    - etc.
+        List of ServerMessage instructions (one per detected object)
     """
-    # Example: Simple red object detection
-    width, height = image.size
-    img_array = np.array(image.convert("RGB"))
+    if grounding_model is None:
+        logger.warning("Grounding model not initialized")
+        return []
 
-    red_mask = (img_array[:, :, 0] > 150) & (img_array[:, :, 1] < 100) & (img_array[:, :, 2] < 100)
-    red_coords = np.argwhere(red_mask)
+    try:
+        # Convert PIL Image to numpy array (RGB format for YOLO)
+        img_array = np.array(image.convert("RGB"))
 
-    if len(red_coords) > 50:
-        y_coords, x_coords = red_coords[:, 0], red_coords[:, 1]
-        x_min, x_max = int(x_coords.min()), int(x_coords.max())
-        y_min, y_max = int(y_coords.min()), int(y_coords.max())
+        # Run YOLO detection
+        results = grounding_model.detect(img_array)
 
-        return BBoxMessage(
-            type="bbox",
-            bbox=BoundingBox(
-                x=x_min,
-                y=y_min,
-                width=x_max - x_min,
-                height=y_max - y_min,
-                label="Red Object",
-                confidence=0.95,
-            ),
-            color=Color(r=1.0, g=0.0, b=0.0, a=0.8),
-            timestamp=datetime.now().isoformat(),
-        )
+        # Extract bounding boxes from results
+        messages = []
+        if results and len(results) > 0:
+            result = results[0]  # Get first result (single image)
+            
+            # Check if there are any detections
+            if result.boxes is not None and len(result.boxes) > 0:
+                boxes = result.boxes.xyxy.cpu().numpy()  # Get bounding boxes in xyxy format
+                confidences = result.boxes.conf.cpu().numpy()  # Get confidence scores
+                class_ids = result.boxes.cls.cpu().numpy()  # Get class IDs
+                
+                # Get class names
+                class_names = result.names  # Dictionary mapping class_id to class_name
+                
+                for box, conf, cls_id in zip(boxes, confidences, class_ids):
+                    x_min, y_min, x_max, y_max = map(int, box)
+                    print(f"Bounding box: {x_min}, {y_min}, {x_max}, {y_max}")
+                    
+                    # Get class name
+                    class_name = class_names[int(cls_id)] if class_names else f"Object {int(cls_id)}"
+                    print(f"Class name: {class_name}")
+                    
+                    # Generate color based on class_id for visual distinction
+                    # Using a simple hash-based color generation
+                    np.random.seed(int(cls_id))
+                    r, g, b = np.random.rand(3)
+                    
+                    messages.append(
+                        BBoxMessage(
+                            type="bbox",
+                            bbox=BoundingBox(
+                                x=x_min,
+                                y=y_min,
+                                width=x_max - x_min,
+                                height=y_max - y_min,
+                                label=class_name,
+                                confidence=float(conf),
+                            ),
+                            color=Color(r=float(r), g=float(g), b=float(b), a=0.8),
+                            timestamp=datetime.now().isoformat(),
+                        )
+                    )
+        
+        return messages
 
-    return None
+    except Exception as e:
+        logger.error(f"Error in YOLO detection: {e}")
+        return []
 
 
 def process_audio_chunk(
@@ -431,10 +462,11 @@ async def handle_video_frame(message: VideoFrameMessage, client_state: ClientSta
             "timestamp": message.timestamp,
         }
 
-        # PLACEHOLDER: Call your video processing function
-        instruction = process_video_frame(image, frame_info)
+        # Call YOLO-based video processing function
+        instructions = process_video_frame(image, frame_info)
 
-        if instruction:
+        # Send all bounding box instructions to the client
+        for instruction in instructions:
             await client_state.websocket.send(serialize_server_message(instruction))
 
         # Update client state
@@ -578,17 +610,31 @@ async def forever():
 
 
 async def main():
+    global grounding_model
+    
     print("=" * 60)
     print("AR Processing Server")
     print("=" * 60)
-    print("WebSocket Server: ws://0.0.0.0:5000")
+    
+    # Initialize the grounding model
+    model_path = "yoloe-11s-seg.pt"
+    initial_prompt = "person, cup, bottle, phone, laptop, book"  # Common objects to detect
+    
+    try:
+        grounding_model = Grounding(model_path=model_path, initial_prompt=initial_prompt)
+        print(f"Grounding model initialized with prompt: {initial_prompt}")
+    except Exception as e:
+        print(f"Warning: Failed to initialize grounding model: {e}")
+        print("Server will run without object detection")
+    
+    print("WebSocket Server: ws://0.0.0.0:5001")
     print("Waiting for Spectacles to connect...")
     print("=" * 60)
 
     async with serve(
         handle_client,
         "0.0.0.0",
-        5000,
+        5001,
         max_size=10_000_000,
         ping_interval=20,
         ping_timeout=10,

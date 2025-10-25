@@ -10,7 +10,7 @@ An AI-powered AR glasses development platform with real-time computer vision, ob
 - **File**: TypeScript component for Lens Studio
 - **Function**: Captures camera frames from AR glasses and sends to server
 - **To add new UI**: Edit `CoordinateFetcher.ts` in the `displayLabel()` method (lines 124-151) to modify visual markers and positioning
-- **Server endpoint**: Sends frames to `http://localhost:5000/process` (configured in `serverUrl` property)
+- **Server endpoint**: Sends frames to `http://localhost:5001/process` (configured in `serverUrl` property)
 
 ### AI Agent
 **Location**: Multiple files in root directory
@@ -27,7 +27,7 @@ An AI-powered AR glasses development platform with real-time computer vision, ob
 **To add new AI tools**: Create functions in `ai_client.py` or `ollama_client.py` following existing patterns
 
 ### Backend Servers
-- **`main.py`**: WebSocket server for AR glasses (port 5000)
+- **`main.py`**: WebSocket server for AR glasses (port 5001)
 - **`app.py`**: Webcam webapp (port 5001)
   - Camera feed display
   - Frame analysis with AI models

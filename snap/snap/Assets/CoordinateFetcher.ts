@@ -55,8 +55,8 @@ export class ARStreamingClient extends BaseScriptComponent {
     private isConnected: boolean = false;
 
     @input
-    @hint("WebSocket server URL, e.g., ws://192.168.1.100:5000")
-    serverUrl: string = "ws://192.168.1.100:5000";
+    @hint("WebSocket server URL, e.g., ws://192.168.1.100:5001")
+    serverUrl: string = "ws://172.20.0.231:5001";
 
     // UI Elements
     @input
