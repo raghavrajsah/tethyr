@@ -72,7 +72,8 @@ export class ARStreamingClient extends BaseScriptComponent {
     bboxParent: SceneObject;
 
     // Active bounding boxes tracking
-    private activeBoundBoxes: Map<string, SceneObject> = new Map();
+    private activeBoundBoxes: SceneObject[] = [];
+    private lastFrameNumber: number = -1;
 
     // Frame processing control
     private isProcessingFrame: boolean = false;
@@ -478,29 +479,26 @@ export class ARStreamingClient extends BaseScriptComponent {
         }
 
         const bbox = message.bbox;
-        const bboxKey = `${bbox.label}_${bbox.x}_${bbox.y}`;
-        this.createOrUpdateBoundBox(bboxKey, bbox, message.color);
+        const frameNumber = message.frame_number || this.frameCounter;
+        
+        // Clear old bounding boxes when we receive a detection from a new frame
+        if (frameNumber !== this.lastFrameNumber) {
+            this.clearBoundingBoxes();
+            this.lastFrameNumber = frameNumber;
+        }
+        
+        this.createBoundBox(bbox, message.color);
     }
 
-    private createOrUpdateBoundBox(
-        bboxKey: string,
-        bbox: any,
-        color: any
-    ): void {
+    private createBoundBox(bbox: any, color: any): void {
         const camera = global.deviceInfoSystem.getTrackingCameraForId(
             CameraModule.CameraId.Default_Color
         );
         const resolution = camera.resolution;
 
-        // Check if we already have this bounding box
-        let bboxInstance = this.activeBoundBoxes.get(bboxKey);
-
-        // Create new instance if needed
-        if (!bboxInstance) {
-            bboxInstance = this.boundBoxPrefab.instantiate(this.bboxParent);
-            this.activeBoundBoxes.set(bboxKey, bboxInstance);
-            print(`Created new BoundBox for: ${bbox.label}`);
-        }
+        // Create new BoundBox instance
+        const bboxInstance = this.boundBoxPrefab.instantiate(this.bboxParent);
+        this.activeBoundBoxes.push(bboxInstance);
 
         // Get the ScreenTransform component from the main object
         const screenTransform = bboxInstance.getComponent(
@@ -508,21 +506,21 @@ export class ARStreamingClient extends BaseScriptComponent {
         ) as ScreenTransform;
 
         if (screenTransform) {
-            // Convert pixel coordinates to normalized screen coordinates (0-1)
-            const left = bbox.x / resolution.x;
-            const top = bbox.y / resolution.y;
-            const width = bbox.width / resolution.x;
-            const height = bbox.height / resolution.y;
+            // // Keep anchors at top-left corner (0, 0, 0, 0)
+            // screenTransform.anchors.left = 0;
+            // screenTransform.anchors.top = 0;
 
-            // Set the anchors to position the bbox
-            // In Lens Studio, anchors define the normalized position
-            screenTransform.anchors.left = left;
-            screenTransform.anchors.right = left + width;
-            screenTransform.anchors.top = top;
-            screenTransform.anchors.bottom = top + height;
+            // Position via offsets (pixels from top-left)
+            screenTransform.offsets.left = bbox.x;
+            screenTransform.offsets.top  = bbox.y;
+
+            // Size – Lens Studio exposes 'width' & 'height' only when fixedWidth/Height are true.
+            // They aren’t in the TypeScript typings, so we cast to 'any'.
+            (screenTransform as any).width  = bbox.width;
+            (screenTransform as any).height = bbox.height;
 
             print(
-                `BBox positioned: ${bbox.label} at (${bbox.x}, ${bbox.y}) size (${bbox.width}x${bbox.height})`
+                `BBox created: ${bbox.label} at (${bbox.x}, ${bbox.y}) size (${bbox.width}x${bbox.height})`
             );
         }
 
@@ -550,7 +548,6 @@ export class ARStreamingClient extends BaseScriptComponent {
                 ) as Text;
                 if (textComponent) {
                     textComponent.text = bbox.label || "Object";
-                    print(`Set label text to: ${bbox.label}`);
                 }
                 break;
             }
@@ -560,18 +557,23 @@ export class ARStreamingClient extends BaseScriptComponent {
         bboxInstance.enabled = true;
     }
 
+    private clearBoundingBoxes(): void {
+        // Destroy all active bounding boxes
+        for (const bboxInstance of this.activeBoundBoxes) {
+            if (bboxInstance) {
+                bboxInstance.destroy();
+            }
+        }
+        this.activeBoundBoxes = [];
+    }
+
     private clearAllOverlays(): void {
         if (this.overlayText) {
             this.overlayText.text = "";
         }
         
         // Clear all dynamically created bounding boxes
-        this.activeBoundBoxes.forEach((bboxInstance, key) => {
-            if (bboxInstance) {
-                bboxInstance.destroy();
-            }
-        });
-        this.activeBoundBoxes.clear();
+        this.clearBoundingBoxes();
         
         print("Overlays cleared");
     }
