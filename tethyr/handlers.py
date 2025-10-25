@@ -119,7 +119,7 @@ async def handle_video_frame(
         # === PIPELINE 1: Send to Gemini for context awareness ===
         gemini_session = await gemini_manager.get_session(client_state.client_id)
         if gemini_session:
-            await gemini_session.send_video_frame(message.data)
+            await gemini_session.send_video_frame(image_data)
 
         # === PIPELINE 2: Run YOLO detection continuously ===
         # Convert PIL image to numpy array

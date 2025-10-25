@@ -29,6 +29,8 @@
     audioComponent: false
     audioReadIntervalMs: false
     bboxImage: false
+    bboxParent: false
+    boundBoxPrefab: false
     microphoneAudio: false
     overlayText: false
     prerecordedAudio: false
@@ -49,6 +51,8 @@
       audioComponent: !<reference.AudioComponent> 00000000-0000-0000-0000-000000000000
       serverUrl: "http://localhost:5000"
       overlayText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      boundBoxPrefab: !<reference.ObjectPrefab> 00000000-0000-0000-0000-000000000000
+      bboxParent: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
       bboxImage: !<reference.Image> 00000000-0000-0000-0000-000000000000
       screenTransform: !<reference.ScreenTransform> 00000000-0000-0000-0000-000000000000
       videoFrameSkip: !<float> 15.000000
@@ -62,6 +66,8 @@
     - '// @input Component.AudioComponent audioComponent {"hint":"Audio Component for playing pre-recorded audio (required if using prerecorded audio)"}'
     - '// @input string serverUrl = "ws://192.168.1.100:5000" {"hint":"WebSocket server URL, e.g., ws://192.168.1.100:5000"}'
     - '// @input Component.Text overlayText {"hint":"Text overlay for displaying instructions"}'
+    - '// @input Asset.ObjectPrefab boundBoxPrefab {"hint":"BoundBox prefab for bounding box visualization"}'
+    - '// @input SceneObject bboxParent {"hint":"Parent scene object for instantiated bounding boxes"}'
     - '// @input Component.Image bboxImage {"hint":"Image component for bounding box visualization"}'
     - '// @input Component.ScreenTransform screenTransform {"hint":"Screen transform for positioning bbox"}'
     - '// @input float videoFrameSkip = 15 {"hint":"Send every Nth video frame"}'
