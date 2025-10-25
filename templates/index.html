@@ -75,6 +75,54 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
+
+        .analyze-button {
+            background-color: #2196F3;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            margin-left: 10px;
+        }
+
+        .analyze-button:hover {
+            background-color: #0b7dda;
+        }
+
+        .analyze-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .response-container {
+            margin-top: 20px;
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 640px;
+            display: none;
+        }
+
+        .response-container.visible {
+            display: block;
+        }
+
+        .response-title {
+            font-weight: bold;
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+
+        .response-text {
+            color: #333;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 <body>
@@ -91,6 +139,14 @@
         <button class="save-button" id="save-button" onclick="savePhoto()">
             📸 Save Photo
         </button>
+        <button class="analyze-button" id="analyze-button" onclick="analyzeFrame()">
+            🤖 Analyze Frame
+        </button>
+    </div>
+
+    <div class="response-container" id="response-container">
+        <div class="response-title">AI Analysis:</div>
+        <div class="response-text" id="response-text"></div>
     </div>
     
     <script>
@@ -126,11 +182,11 @@
         function savePhoto() {
             const button = document.getElementById('save-button');
             const originalText = button.textContent;
-            
+
             // Disable button and show loading state
             button.disabled = true;
             button.textContent = '💾 Saving...';
-            
+
             // Send request to save current frame
             fetch('/save_photo', {
                 method: 'POST',
@@ -150,6 +206,56 @@
             })
             .catch(error => {
                 status.textContent = '❌ Error saving photo';
+                status.className = 'status error';
+            })
+            .finally(() => {
+                // Re-enable button
+                button.disabled = false;
+                button.textContent = originalText;
+            });
+        }
+
+        // Analyze frame functionality
+        function analyzeFrame() {
+            const button = document.getElementById('analyze-button');
+            const originalText = button.textContent;
+            const responseContainer = document.getElementById('response-container');
+            const responseText = document.getElementById('response-text');
+
+            // Disable button and show loading state
+            button.disabled = true;
+            button.textContent = '🤔 Analyzing...';
+
+            // Show response container with loading message
+            responseContainer.classList.add('visible');
+            responseText.textContent = 'Analyzing the current frame...';
+
+            // Send request to analyze current frame
+            fetch('/analyze_frame', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    prompt: 'What do you see in this image? Describe it briefly.',
+                    system_prompt: 'You are a helpful assistant that describes images concisely.'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    responseText.textContent = data.response;
+                    status.textContent = '✅ Frame analyzed successfully';
+                    status.className = 'status';
+                } else {
+                    responseText.textContent = `Error: ${data.error}`;
+                    status.textContent = '❌ Failed to analyze frame';
+                    status.className = 'status error';
+                }
+            })
+            .catch(error => {
+                responseText.textContent = `Error: ${error.message}`;
+                status.textContent = '❌ Error analyzing frame';
                 status.className = 'status error';
             })
             .finally(() => {

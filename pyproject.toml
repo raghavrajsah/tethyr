@@ -1,7 +1,15 @@
 [project]
 name = "tethyr-labs"
 version = "0.1.0"
-description = "Add your description here"
+description = "Webcam web app with AI integration"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=2.3.3",
+    "opencv-python>=4.10.0",
+    "numpy<2.0.0",
+    "werkzeug>=2.3.7",
+    "requests>=2.31.0",
+    "ollama>=0.6.0",
+    "websockets>=15.0.1",
+]
