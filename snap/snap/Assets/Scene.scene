@@ -610,8 +610,8 @@
       audioComponent: !<reference.AudioComponent> cf302a60-4f37-4ca8-ad4c-b66dbef6f3ae
       serverUrl: "ws://172.20.0.231:5001"
       overlayText: !<reference.Text> fa02cb47-f9c7-40f8-a716-237aadd346ee
-      bboxImage: !<reference.Image> 5c63c789-46fc-4888-b780-796762041724
-      screenTransform: !<reference.ScreenTransform> c1454d55-5400-4242-a91a-b5c75f0d662b
+      boundBoxPrefab: !<reference.ObjectPrefab> aa5e1187-ca9a-4d03-8d70-df47710089d4
+      bboxParent: !<reference.SceneObject> 7c8f3e99-944a-4fae-b839-f2c2f6b417f9
       videoFrameSkip: !<float> 15.000000
       audioReadIntervalMs: !<float> 100.000000
   ScriptTypes:
@@ -1766,7 +1766,7 @@
     Scale: {x: 1.000000, y: 1.000000, z: 1.000000}
     HasSegmentScaleCompensation: false
   Children:
-    - !<own> ead483a6-1fae-40fa-8adc-2c4d60f2581c
+    - !<own> fc18ad9f-5eb2-45a3-ab9b-a3b0fe9ce9b0
   Components:
     - !<own> 6363bd44-36f8-4771-9a6f-865325dc5f0b
     - !<own> 89a4f85a-4887-48ca-ae92-b000095269b9
@@ -1913,7 +1913,7 @@
     []
   Name: Canvas
   Enabled: true
-  UnitType: Points
+  UnitType: Pixels
   SortingType: Hierarchy
   WorldSpaceRect:
     left: -15.000000
@@ -2989,21 +2989,6 @@
 - !<SceneObject/e67355a4-c26a-4bfc-b712-56f879b0f199>
   PrefabRemaps:
     []
-  Name: MobileInteractor
-  Enabled: true
-  Layers: 1
-  LocalTransform: !<TransformEntity>
-    Position: {x: 0.000000, y: 0.000000, z: 0.000000}
-    Rotation: {x: 0.000000, y: 0.000000, z: 0.000000}
-    Scale: {x: 1.000000, y: 1.000000, z: 1.000000}
-    HasSegmentScaleCompensation: false
-  Children:
-    []
-  Components:
-    - !<own> 28cf3766-599c-4bd5-8505-2a92bf6606ed
-- !<SceneObject/e7d04753-28a1-4f9d-bc21-9c8284652226>
-  PrefabRemaps:
-    []
   Name: mid-3_end_end_end_end
   Enabled: true
   Layers: 1
@@ -3252,7 +3237,7 @@
   PrefabRemaps:
     []
   Name: BoundBox
-  Enabled: true
+  Enabled: false
   Layers: 1048576
   LocalTransform: !<TransformEntity>
     Position: {x: 0.000000, y: 0.000000, z: 0.000000}
