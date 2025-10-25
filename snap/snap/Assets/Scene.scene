@@ -610,8 +610,8 @@
       audioComponent: !<reference.AudioComponent> cf302a60-4f37-4ca8-ad4c-b66dbef6f3ae
       serverUrl: "ws://172.20.0.231:5001"
       overlayText: !<reference.Text> fa02cb47-f9c7-40f8-a716-237aadd346ee
-      bboxImage: !<reference.Image> 5c63c789-46fc-4888-b780-796762041724
-      screenTransform: !<reference.ScreenTransform> c1454d55-5400-4242-a91a-b5c75f0d662b
+      boundBoxPrefab: !<reference.ObjectPrefab> aa5e1187-ca9a-4d03-8d70-df47710089d4
+      bboxParent: !<reference.SceneObject> 7c8f3e99-944a-4fae-b839-f2c2f6b417f9
       videoFrameSkip: !<float> 15.000000
       audioReadIntervalMs: !<float> 100.000000
   ScriptTypes:
@@ -662,39 +662,6 @@
     - !<own> b6967747-d54d-4fdf-b8cc-652d7e6080ba
   Components:
     []
-- !<ScreenTransform/30fceb0e-605f-4f4e-8f72-00bde8a42c64>
-  PrefabRemaps:
-    []
-  Name: Screen Transform
-  Enabled: true
-  IsAdvanced: false
-  Constraints:
-    pinToLeft: false
-    pinToTop: false
-    pinToRight: false
-    pinToBottom: false
-    fixedWidth: false
-    fixedHeight: false
-    deactivatedFixedSprite: false
-    deactivatedFixedPivot: false
-  Pivot: {x: 0.000000, y: 0.000000}
-  Transform:
-    position: {x: 0.000000, y: 0.000000, z: 0.000000}
-    rotation: {x: 0.000000, y: 0.000000, z: 0.000000}
-    scale: {x: 1.000000, y: 1.000000, z: 1.000000}
-    hasSegmentScaleCompensation: false
-  RawMode: true
-  ForceBasic: true
-  Anchor:
-    left: -1.000000
-    bottom: -1.000000
-    right: 1.000000
-    top: 1.000000
-  Offset:
-    left: 0.000000
-    bottom: 0.000000
-    right: 0.000000
-    top: 0.000000
 - !<SceneObject/319c29db-cd9c-448c-8028-20ef49b55a70>
   PrefabRemaps:
     []
@@ -1766,7 +1733,7 @@
     Scale: {x: 1.000000, y: 1.000000, z: 1.000000}
     HasSegmentScaleCompensation: false
   Children:
-    - !<own> ead483a6-1fae-40fa-8adc-2c4d60f2581c
+    - !<own> fc18ad9f-5eb2-45a3-ab9b-a3b0fe9ce9b0
   Components:
     - !<own> 6363bd44-36f8-4771-9a6f-865325dc5f0b
     - !<own> 89a4f85a-4887-48ca-ae92-b000095269b9
@@ -2638,13 +2605,6 @@
     - !<own> d3340ef4-90e8-49c1-aeb6-4194ed9937f9
   Components:
     []
-- !<ScreenRegionComponent/cb2d4d19-37ce-4db8-8abc-734c2207742f>
-  PrefabRemaps:
-    []
-  Name: Screen Region
-  Enabled: true
-  ScreenRegionType: FullFrame
-  ResizeWithKeyboard: false
 - !<SceneObject/cb723e33-4a15-4f02-82d2-7e80299b1395>
   PrefabRemaps:
     []
@@ -3016,22 +2976,6 @@
     []
   Components:
     []
-- !<SceneObject/ead483a6-1fae-40fa-8adc-2c4d60f2581c>
-  PrefabRemaps:
-    []
-  Name: Full Frame Region
-  Enabled: false
-  Layers: 1048576
-  LocalTransform: !<TransformEntity>
-    Position: {x: 0.000000, y: 0.000000, z: 0.000000}
-    Rotation: {x: 0.000000, y: 0.000000, z: 0.000000}
-    Scale: {x: 1.000000, y: 1.000000, z: 1.000000}
-    HasSegmentScaleCompensation: false
-  Children:
-    - !<own> fc18ad9f-5eb2-45a3-ab9b-a3b0fe9ce9b0
-  Components:
-    - !<own> 30fceb0e-605f-4f4e-8f72-00bde8a42c64
-    - !<own> cb2d4d19-37ce-4db8-8abc-734c2207742f
 - !<SceneObject/ec5cf781-7365-4db2-83df-e3d10556ffd3>
   PrefabRemaps:
     []
@@ -3252,7 +3196,7 @@
   PrefabRemaps:
     []
   Name: BoundBox
-  Enabled: true
+  Enabled: false
   Layers: 1048576
   LocalTransform: !<TransformEntity>
     Position: {x: 0.000000, y: 0.000000, z: 0.000000}
