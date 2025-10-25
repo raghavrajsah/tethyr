@@ -15,7 +15,7 @@ class Camera:
         self.is_running = False
         self.yoloe_model = None
         self.detection_enabled = True
-        self.prompt_text = "head"  # Default prompt - can be changed
+        self.prompt_text = "person"  # Default prompt - can be changed
         
     def start(self):
         """Start the camera capture"""
@@ -49,7 +49,19 @@ class Camera:
         if self.yoloe_model:
             # Split by comma for multiple objects
             classes = [cls.strip() for cls in prompt.split(',')]
-            self.yoloe_model.set_classes(classes, self.yoloe_model.get_text_pe(classes))
+            print(f"Setting YOLOE classes to: {classes}")
+            try:
+                text_embeddings = self.yoloe_model.get_text_pe(classes)
+                print(f"Text embeddings shape: {text_embeddings.shape if hasattr(text_embeddings, 'shape') else 'N/A'}")
+                self.yoloe_model.set_classes(classes, text_embeddings)
+                print("Successfully set classes")
+            except Exception as e:
+                print(f"Error setting classes: {e}")
+                # Try alternative approach - just set classes without embeddings
+                print("Trying to detect 'person' instead...")
+                self.prompt_text = "person"
+                classes = ["person"]
+                self.yoloe_model.set_classes(classes, self.yoloe_model.get_text_pe(classes))
         
     def _capture_frames(self):
         """Continuously capture frames from the camera"""
@@ -69,12 +81,19 @@ class Camera:
     def _process_frame_with_yoloe(self, frame):
         """Process frame with YOLOE and draw bounding boxes"""
         try:
-            # Run YOLOE inference
-            results = self.yoloe_model.predict(frame, verbose=False, conf=0.25)
+            # Run YOLOE inference with lower confidence threshold
+            # Note: Using very low confidence to see any detections
+            results = self.yoloe_model.predict(frame, verbose=False, conf=0.05, iou=0.5)
             
             # Draw bounding boxes on the frame
             if len(results) > 0:
                 result = results[0]
+                
+                # Debug: Print detection info
+                if result.boxes is not None:
+                    print(f"Detections found: {len(result.boxes)}")
+                    if len(result.boxes) > 0:
+                        print(f"Confidences: {result.boxes.conf.cpu().numpy()}")
                 
                 # Draw boxes and labels
                 if result.boxes is not None and len(result.boxes) > 0:
