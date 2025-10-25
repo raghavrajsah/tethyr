@@ -64,12 +64,24 @@ export class ARStreamingClient extends BaseScriptComponent {
     overlayText: Text | undefined;
 
     @input
+    @hint("BoundBox prefab for bounding box visualization")
+    boundBoxPrefab: ObjectPrefab | undefined;
+
+    @input
+    @hint("Parent scene object for instantiated bounding boxes")
+    bboxParent: SceneObject | undefined;
+
+    // Legacy single bbox support (deprecated)
+    @input
     @hint("Image component for bounding box visualization")
     bboxImage: Image | undefined;
 
     @input
     @hint("Screen transform for positioning bbox")
     screenTransform: ScreenTransform | undefined;
+
+    // Active bounding boxes tracking
+    private activeBoundBoxes: Map<string, SceneObject> = new Map();
 
     // Frame processing control
     private isProcessingFrame: boolean = false;
@@ -459,11 +471,110 @@ export class ARStreamingClient extends BaseScriptComponent {
     }
 
     private handleBboxInstruction(message: any): void {
-        if (!this.bboxImage || !this.screenTransform || !message.bbox) {
+        if (!message.bbox) {
             return;
         }
 
         const bbox = message.bbox;
+        const bboxKey = `${bbox.label}_${bbox.x}_${bbox.y}`;
+
+        // Use new prefab-based system if available
+        if (this.boundBoxPrefab && this.bboxParent) {
+            this.createOrUpdateBoundBox(bboxKey, bbox, message.color);
+        } 
+        // Fallback to legacy single bbox system
+        else if (this.bboxImage && this.screenTransform) {
+            this.updateLegacyBoundBox(bbox, message.color);
+        }
+    }
+
+    private createOrUpdateBoundBox(
+        bboxKey: string,
+        bbox: any,
+        color: any
+    ): void {
+        if (!this.boundBoxPrefab || !this.bboxParent) {
+            return;
+        }
+
+        const camera = global.deviceInfoSystem.getTrackingCameraForId(
+            CameraModule.CameraId.Default_Color
+        );
+        const resolution = camera.resolution;
+
+        // Check if we already have this bounding box
+        let bboxInstance = this.activeBoundBoxes.get(bboxKey);
+
+        // Create new instance if needed
+        if (!bboxInstance) {
+            bboxInstance = this.boundBoxPrefab.instantiate(this.bboxParent);
+            this.activeBoundBoxes.set(bboxKey, bboxInstance);
+            print(`Created new BoundBox for: ${bbox.label}`);
+        }
+
+        // Get the ScreenTransform component from the main object
+        const screenTransform = bboxInstance.getComponent(
+            "Component.ScreenTransform"
+        ) as ScreenTransform;
+
+        if (screenTransform) {
+            // Convert pixel coordinates to normalized screen coordinates (0-1)
+            const left = bbox.x / resolution.x;
+            const top = bbox.y / resolution.y;
+            const width = bbox.width / resolution.x;
+            const height = bbox.height / resolution.y;
+
+            // Set the anchors to position the bbox
+            // In Lens Studio, anchors define the normalized position
+            screenTransform.anchors.left = left;
+            screenTransform.anchors.right = left + width;
+            screenTransform.anchors.top = top;
+            screenTransform.anchors.bottom = top + height;
+
+            print(
+                `BBox positioned: ${bbox.label} at (${bbox.x}, ${bbox.y}) size (${bbox.width}x${bbox.height})`
+            );
+        }
+
+        // Get the Image component and set color
+        const imageComponent = bboxInstance.getComponent(
+            "Component.Image"
+        ) as Image;
+
+        if (imageComponent && color && imageComponent.mainMaterial) {
+            imageComponent.mainMaterial.mainPass.baseColor = new vec4(
+                color.r,
+                color.g,
+                color.b,
+                color.a
+            );
+        }
+
+        // Find the Label child object and set the text
+        const childCount = bboxInstance.getChildrenCount();
+        for (let i = 0; i < childCount; i++) {
+            const child = bboxInstance.getChild(i);
+            if (child.name === "Label") {
+                const textComponent = child.getComponent(
+                    "Component.Text"
+                ) as Text;
+                if (textComponent) {
+                    textComponent.text = bbox.label || "Object";
+                    print(`Set label text to: ${bbox.label}`);
+                }
+                break;
+            }
+        }
+
+        // Make sure the instance is enabled
+        bboxInstance.enabled = true;
+    }
+
+    private updateLegacyBoundBox(bbox: any, color: any): void {
+        if (!this.bboxImage || !this.screenTransform) {
+            return;
+        }
+
         const camera = global.deviceInfoSystem.getTrackingCameraForId(
             CameraModule.CameraId.Default_Color
         );
@@ -491,8 +602,7 @@ export class ARStreamingClient extends BaseScriptComponent {
         );
 
         // Optional: apply color if provided
-        if (message.color && this.bboxImage.mainMaterial) {
-            const color = message.color;
+        if (color && this.bboxImage.mainMaterial) {
             this.bboxImage.mainMaterial.mainPass.baseColor = new vec4(
                 color.r,
                 color.g,
@@ -506,9 +616,20 @@ export class ARStreamingClient extends BaseScriptComponent {
         if (this.overlayText) {
             this.overlayText.text = "";
         }
+        
+        // Clear legacy single bbox
         if (this.bboxImage) {
             this.bboxImage.enabled = false;
         }
+        
+        // Clear all dynamically created bounding boxes
+        this.activeBoundBoxes.forEach((bboxInstance, key) => {
+            if (bboxInstance) {
+                bboxInstance.destroy();
+            }
+        });
+        this.activeBoundBoxes.clear();
+        
         print("Overlays cleared");
     }
 
@@ -523,5 +644,8 @@ export class ARStreamingClient extends BaseScriptComponent {
             this.socket.close();
             this.socket = null;
         }
+        
+        // Clean up all bounding boxes
+        this.clearAllOverlays();
     }
 }
