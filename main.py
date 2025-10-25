@@ -320,14 +320,13 @@ def identify_object_from_frame(image_base64: str) -> str | None:
         return None
 
 
-def process_video_frame(image: Image.Image, frame_info: dict, client_id: str) -> list[ServerMessage]:
+def process_video_frame(image: Image.Image, frame_info: dict) -> list[ServerMessage]:
     """
     Process video frame using YOLO grounding model and return bounding box instructions
 
     Args:
         image: PIL Image object
         frame_info: Dictionary with frame metadata (frame_number, resolution, timestamp)
-        client_id: Client session identifier
 
     Returns:
         List of ServerMessage instructions (one per detected object)
