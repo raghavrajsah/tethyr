@@ -14,6 +14,15 @@ from PIL import Image
 from websockets import ConnectionClosed
 from websockets.asyncio.server import ServerConnection, serve
 
+# Load environment variables from .env file
+import load_env  # noqa: E402
+
+# Import context manager for repair session tracking
+from agent_context import context_manager
+
+# Import AI clients for vision analysis
+from ai_client import stream_to_gemini_live_sync
+
 from grounding import Grounding
 
 logger.add(
@@ -23,6 +32,60 @@ logger.add(
     level="TRACE",
     encoding="utf-8",
 )
+
+
+# ============================================================================
+# REPAIR PLANS AND SAFETY WARNINGS
+# ============================================================================
+
+# Predefined repair plans for different objects
+REPAIR_PLANS = {
+    "light fixture": [
+        "Turn off power at the circuit breaker",
+        "Remove the old light fixture cover",
+        "Disconnect the wiring from the old fixture",
+        "Connect wiring to the new fixture (match wire colors)",
+        "Secure the new fixture to the ceiling box",
+        "Attach the fixture cover and restore power",
+    ],
+    "faucet": [
+        "Turn off water supply valves under the sink",
+        "Remove faucet handle by unscrewing the set screw",
+        "Unscrew and remove the old cartridge or valve",
+        "Install the new cartridge (ensure proper alignment)",
+        "Reattach the faucet handle",
+        "Turn on water supply and test for leaks",
+    ],
+    "door hinge": [
+        "Open the door and support it with a wedge",
+        "Remove the hinge pin using a hammer and nail punch",
+        "Unscrew the old hinge from the door",
+        "Align and screw the new hinge to the door",
+        "Reattach the door and insert the hinge pin",
+        "Test door swing and adjust if needed",
+    ],
+    "outlet": [
+        "Turn off power at the circuit breaker",
+        "Remove the outlet cover plate",
+        "Unscrew the outlet from the electrical box",
+        "Disconnect wires from the old outlet (note positions)",
+        "Connect wires to the new outlet (match positions)",
+        "Screw outlet into box and replace cover plate",
+    ],
+}
+
+# Safety warnings for different repair types
+SAFETY_WARNINGS = {
+    "light fixture": "⚠️ SAFETY: Ensure power is OFF at circuit breaker before starting!",
+    "faucet": "⚠️ SAFETY: Turn off water supply before starting to avoid flooding!",
+    "door hinge": "⚠️ SAFETY: Support the door to prevent it from falling!",
+    "outlet": "⚠️ SAFETY: Ensure power is OFF at circuit breaker before starting!",
+}
+
+
+# ============================================================================
+# DATA CLASSES
+# ============================================================================
 
 
 @dataclass
@@ -212,13 +275,59 @@ def save_audio_buffer(client_state: ClientState) -> None:
         logger.error(f"Error saving audio for client {client_state.client_id}: {e}")
 
 
-def process_video_frame(image: Image.Image, frame_info: dict) -> list[ServerMessage]:
+def identify_object_from_frame(image_base64: str) -> str | None:
+    """
+    Use Gemini Live to identify what object is in the frame.
+
+    Args:
+        image_base64: Base64 encoded image
+
+    Returns:
+        Object type string (e.g., "light fixture") or None if not recognized
+    """
+    try:
+        prompt = """Identify the main object in this image that might need repair.
+        Respond with ONLY ONE of these options:
+        - light fixture
+        - faucet
+        - door hinge
+        - outlet
+        - unknown
+
+        Just respond with the object name, nothing else."""
+
+        # Call Gemini Live with vision model
+        responses = stream_to_gemini_live_sync(
+            image_frame=image_base64,
+            text=prompt,
+            model="gemini-2.0-flash-exp",
+        )
+
+        # Combine streaming response chunks
+        response = "".join([r.get("text", "") for r in responses if r.get("type") == "text"])
+
+        # Clean up response
+        detected_object = response.strip().lower()
+
+        # Check if it's a known repair object
+        if detected_object in REPAIR_PLANS:
+            return detected_object
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error identifying object: {e}")
+        return None
+
+
+def process_video_frame(image: Image.Image, frame_info: dict, client_id: str) -> list[ServerMessage]:
     """
     Process video frame using YOLO grounding model and return bounding box instructions
 
     Args:
         image: PIL Image object
         frame_info: Dictionary with frame metadata (frame_number, resolution, timestamp)
+        client_id: Client session identifier
 
     Returns:
         List of ServerMessage instructions (one per detected object)
@@ -287,42 +396,42 @@ def process_video_frame(image: Image.Image, frame_info: dict) -> list[ServerMess
 def process_audio_chunk(
     audio_data: np.ndarray,
     audio_info: dict,
+    client_id: str,
 ) -> ServerMessage | None:
     """
-    PLACEHOLDER: Process audio chunk and return instruction
+    Process audio chunk for voice commands
 
     Args:
         audio_data: numpy array of audio samples (float32)
         audio_info: Dictionary with audio metadata (sample_rate, samples, channels, timestamp)
+        client_id: Client session identifier
 
     Returns:
         ServerMessage or None
 
-    Audio Timing Notes:
-    - Audio chunks are sent at regular intervals (default 100ms) from the client
-    - Sample rate is typically 16000 Hz
-    - Each chunk contains approximately (sample_rate * interval_seconds) samples
-    - For pre-recorded audio, timing is synchronized with actual playback (no speed-up)
-    - Audio will loop indefinitely if using pre-recorded source
-
-    TODO: Replace with your actual audio processing logic:
-    - Speech-to-text (Whisper, Google Speech API, etc.)
-    - Voice command detection
-    - Audio event detection
-    - Speaker identification
-    - Audio buffering for context-aware processing
-    - etc.
+    TODO: Add speech-to-text for voice commands like "next step", "repeat", etc.
+    For now, volume detection can trigger step advancement
     """
-    # Example: Simple volume-based detection
+    # Simple volume-based detection (placeholder for actual speech recognition)
     volume = np.abs(audio_data).mean()
 
-    if volume > 0.1:  # Arbitrary threshold
-        return OverlayMessage(
-            type="overlay",
-            text=f"🎤 Audio detected (vol: {volume:.2f})",
-            color=Color(r=0.0, g=1.0, b=1.0, a=1.0),
-            timestamp=datetime.now().isoformat(),
-        )
+    # High volume could indicate voice command (placeholder logic)
+    if volume > 0.3:  # Louder threshold for intentional speech
+        # Get context to check if we're in a repair
+        context = context_manager.get_context(client_id)
+
+        if context.is_repair_started() and not context.is_repair_complete():
+            # TODO: Replace with actual speech-to-text to detect "next" command
+            # For now, loud audio advances the step
+            logger.info(f"Voice command detected for client {client_id} - advancing step")
+            context_manager.mark_step_complete(client_id)
+
+            return OverlayMessage(
+                type="overlay",
+                text="✓ Step complete! Moving to next...",
+                color=Color(r=0.0, g=1.0, b=0.0, a=1.0),
+                timestamp=datetime.now().isoformat(),
+            )
 
     return None
 
@@ -516,8 +625,8 @@ async def handle_audio_chunk(message: AudioChunkMessage, client_state: ClientSta
                 f"(total buffered: {len(client_state.audio_buffer)} chunks)"
             )
 
-        # PLACEHOLDER: Call your audio processing function
-        instruction = process_audio_chunk(audio_data, audio_info)
+        # Call voice command processing
+        instruction = process_audio_chunk(audio_data, audio_info, client_state.client_id)
 
         if instruction:
             await client_state.websocket.send(serialize_server_message(instruction))
