@@ -14,13 +14,8 @@ from PIL import Image
 from websockets import ConnectionClosed
 from websockets.asyncio.server import ServerConnection, serve
 
-# Load environment variables from .env file
-import load_env  # noqa: E402
-
-# Import context manager for repair session tracking
+import load_env  # noqa: E402, F401
 from agent_context import context_manager
-
-# Import AI clients for vision analysis
 from ai_client import stream_to_gemini_live_sync
 
 logger.add(
@@ -573,7 +568,7 @@ async def handle_video_frame(message: VideoFrameMessage, client_state: ClientSta
             image.save(frame_path, quality=95)
 
             if message.frame_number % 30 == 0:  # Log every 30 frames
-                logger.debug(f"Saved frame {message.frame_number} to {frame_path}")
+                logger.trace(f"Saved frame {message.frame_number} to {frame_path}")
 
         # Process frame
         frame_info = {
@@ -689,13 +684,13 @@ async def handle_client(websocket: ServerConnection):
                 # Route to appropriate handler
                 match message:
                     case HandshakeMessage():
-                        logger.debug(f"Handshake from client {client_id}")
+                        logger.trace(f"Handshake from client {client_id}")
                         await handle_handshake(message, client_state)
                     case VideoFrameMessage():
-                        logger.debug(f"Video frame from client {client_id}")
+                        logger.trace(f"Video frame from client {client_id}")
                         await handle_video_frame(message, client_state)
                     case AudioChunkMessage():
-                        logger.debug(f"Audio chunk from client {client_id}")
+                        logger.trace(f"Audio chunk from client {client_id}")
                         await handle_audio_chunk(message, client_state)
             except json.JSONDecodeError:
                 logger.error(f"Invalid JSON received from client {client_id} with message {raw_message}")
