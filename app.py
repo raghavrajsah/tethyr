@@ -2,7 +2,7 @@ from flask import Flask, render_template, Response, request, jsonify
 import cv2
 import threading
 import time
-from ultralytics import YOLO
+from grounding import Grounding
 
 app = Flask(__name__)
 
@@ -11,10 +11,7 @@ class Camera:
         self.camera = None
         self.frame = None
         self.is_running = False
-        self.yoloe_model = None
-        self.detection_enabled = True
-        self.prompt_text = "person"  # Default prompt - can be changed
-        self.model_lock = threading.Lock()  # Lock for thread-safe model updates
+        self.grounding = None
         
     def start(self):
         """Start the camera capture"""
@@ -27,13 +24,8 @@ class Camera:
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.camera.set(cv2.CAP_PROP_FPS, 30)
         
-        # Initialize YOLOE model
-        print("Loading YOLOE model...")
-        self.yoloe_model = YOLO("yoloe-11s-seg.pt")
-        
-        # Set custom classes for detection
-        self._set_detection_prompt(self.prompt_text)
-        print(f"YOLOE model loaded with prompt: '{self.prompt_text}'")
+        # Initialize Grounding model
+        self.grounding = Grounding("yoloe-11s-seg.pt", initial_prompt="person")
         
         self.is_running = True
         
@@ -42,22 +34,6 @@ class Camera:
         self.capture_thread.daemon = True
         self.capture_thread.start()
     
-    def _set_detection_prompt(self, prompt):
-        """Set the text prompt for YOLOE detection"""
-        with self.model_lock:
-            try:
-                self.prompt_text = prompt
-                if self.yoloe_model:
-                    # Split by comma for multiple objects
-                    classes = [cls.strip() for cls in prompt.split(',')]
-                    print(f"Updating YOLOE to detect: {classes}")
-                    text_embeddings = self.yoloe_model.get_text_pe(classes)
-                    self.yoloe_model.set_classes(classes, text_embeddings)
-                    print(f"Successfully updated detection prompt to: {classes}")
-            except Exception as e:
-                print(f"ERROR setting detection prompt: {e}")
-                raise  # Re-raise to propagate error to caller
-        
     def _capture_frames(self):
         """Continuously capture frames from the camera"""
         while self.is_running:
@@ -67,7 +43,7 @@ class Camera:
                 frame = cv2.flip(frame, 1)
                 
                 # Run YOLOE detection if enabled
-                if self.detection_enabled and self.yoloe_model:
+                if self.grounding:
                     frame = self._process_frame_with_yoloe(frame)
                 
                 self.frame = frame
@@ -76,10 +52,8 @@ class Camera:
     def _process_frame_with_yoloe(self, frame):
         """Process frame with YOLOE and draw bounding boxes"""
         try:
-            # Use lock to prevent race conditions during model updates
-            with self.model_lock:
-                # Run YOLOE inference
-                results = self.yoloe_model.predict(frame, verbose=False, conf=0.1, iou=0.5)
+            # Get detection results from Grounding
+            results = self.grounding.detect(frame)
             
             # Draw bounding boxes on the frame
             if len(results) > 0:
@@ -100,13 +74,13 @@ class Camera:
                             class_id = int(class_ids[i])
                             # Handle both list and dict formats
                             if isinstance(result.names, dict):
-                                label = result.names.get(class_id, self.prompt_text)
+                                label = result.names.get(class_id, self.grounding.prompt_text)
                             elif isinstance(result.names, list):
-                                label = result.names[class_id] if class_id < len(result.names) else self.prompt_text
+                                label = result.names[class_id] if class_id < len(result.names) else self.grounding.prompt_text
                             else:
-                                label = self.prompt_text
+                                label = self.grounding.prompt_text
                         else:
-                            label = self.prompt_text
+                            label = self.grounding.prompt_text
                         
                         # Draw bounding box
                         color = (0, 255, 0)  # Green color
@@ -196,9 +170,9 @@ def set_prompt():
             return jsonify({'success': False, 'error': 'Prompt cannot be empty'})
         
         # Update the prompt
-        camera._set_detection_prompt(prompt)
+        camera.grounding.update_prompt(prompt)
         
-        return jsonify({'success': True, 'prompt': camera.prompt_text})
+        return jsonify({'success': True, 'prompt': camera.grounding.prompt_text})
             
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})

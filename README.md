@@ -1,45 +1,22 @@
-# Webcam Webapp
-
-A simple Python webapp that displays webcam input in a web browser, designed for macOS.
-
-## Features
-
-- Real-time webcam feed display
-- Clean, responsive web interface
-- Automatic camera detection and error handling
-- Optimized for macOS webcam access
-
 ## Installation
-
-1. Install Python dependencies:
 ```bash
-pip install -r requirements.txt
+uv init
+uv sync
+uv pip install git+https://github.com/ultralytics/CLIP.git
 ```
+
 
 ## Usage
-
-1. Run the application:
 ```bash
-python app.py
+uv run app.py
 ```
 
-2. Open your web browser and navigate to:
-```
-http://localhost:5000
-```
+This will create a webpage that takes camera input, detects objects using YOLOE, and displays the objects' bounding boxes. 
 
-3. Grant camera permissions when prompted by your browser
+The default prompt is "person". You can change the prompt using the textbox. The model supports a list of objects separated by comma, such as "person, light bulb, painting".
 
-4. Press `Ctrl+C` to stop the application
 
-## Requirements
+## Notes
+app.py is just a placeholder for the actual AR input output. The core logic is just grounding.py. 
 
-- Python 3.7+
-- macOS with built-in camera
-- Modern web browser with camera access support
-
-## Troubleshooting
-
-- If you see "Camera not available", make sure to grant camera permissions to your browser
-- If the video doesn't load, try refreshing the page
-- Ensure no other applications are using the camera
+Grounding is the technical term for connecting a natural language description to the specific objects in an image.
