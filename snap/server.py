@@ -1,11 +1,12 @@
-import random
 import json
+import random
 
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
+
 
 @app.route("/process", methods=["POST"])
 def process_frame():

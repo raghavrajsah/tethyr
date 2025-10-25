@@ -1,5 +1,5 @@
 import base64
-from typing import Any, Optional
+from typing import Any
 
 from ollama import ChatResponse, chat
 
@@ -24,8 +24,8 @@ def frame_to_base64(frame: Any) -> str:
 
 def get_ollama_response(
     prompt: str,
-    image_frame: Optional[Any] = None,
-    system_prompt: Optional[str] = None,
+    image_frame: Any | None = None,
+    system_prompt: str | None = None,
     model: str = "llava",
 ) -> str:
     """

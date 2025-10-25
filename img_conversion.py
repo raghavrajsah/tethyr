@@ -1,5 +1,7 @@
 import base64
+
 import cv2
+
 
 def frame_to_base64(frame: any) -> str:
     """
@@ -11,7 +13,7 @@ def frame_to_base64(frame: any) -> str:
     Returns:
         Base64 encoded string
     """
-    ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    ret, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     if not ret:
         raise ValueError("Failed to encode frame")
-    return base64.b64encode(buffer).decode('utf-8')
+    return base64.b64encode(buffer).decode("utf-8")

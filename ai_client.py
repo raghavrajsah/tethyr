@@ -5,7 +5,8 @@ AI Client - Simple functions to send image and text to AI models
 import asyncio
 import json
 import os
-from typing import Any, AsyncGenerator, Callable, Dict, List, Optional
+from collections.abc import AsyncGenerator, Callable
+from typing import Any
 
 import requests
 
@@ -20,9 +21,9 @@ from img_conversion import frame_to_base64
 async def stream_to_gemini_live(
     image_frame: Any,
     text: str = "",
-    api_key: Optional[str] = None,
-    model: str = "gemini-2.0-flash-exp"
-) -> AsyncGenerator[Dict[str, Any], None]:
+    api_key: str | None = None,
+    model: str = "gemini-2.0-flash-exp",
+) -> AsyncGenerator[dict[str, Any]]:
     """
     Stream image frame and text to Gemini Live API with real-time responses
     Uses WebSocket for bidirectional streaming communication
@@ -44,12 +45,12 @@ async def stream_to_gemini_live(
     if websockets is None:
         raise ImportError("websockets package required. Install with: uv add websockets")
 
-    api_key = api_key or os.getenv('GOOGLE_API_KEY')
+    api_key = api_key or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise ValueError("Google API key not set. Set GOOGLE_API_KEY environment variable or pass api_key parameter")
 
     # Convert frame to base64 if needed
-    if hasattr(image_frame, 'shape'):
+    if hasattr(image_frame, "shape"):
         base64_image = frame_to_base64(image_frame)
     else:
         base64_image = image_frame
@@ -63,9 +64,7 @@ async def stream_to_gemini_live(
             setup_message = {
                 "setup": {
                     "model": f"models/{model}",
-                    "generation_config": {
-                        "response_modalities": ["TEXT"]
-                    }
+                    "generation_config": {"response_modalities": ["TEXT"]},
                 }
             }
             await ws.send(json.dumps(setup_message))
@@ -81,26 +80,14 @@ async def stream_to_gemini_live(
             content_parts = []
 
             if text:
-                content_parts.append({
-                    "text": text
-                })
+                content_parts.append({"text": text})
 
-            content_parts.append({
-                "inline_data": {
-                    "mime_type": "image/jpeg",
-                    "data": base64_image
-                }
-            })
+            content_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": base64_image}})
 
             content_message = {
                 "clientContent": {
-                    "turns": [
-                        {
-                            "role": "user",
-                            "parts": content_parts
-                        }
-                    ],
-                    "turn_complete": True
+                    "turns": [{"role": "user", "parts": content_parts}],
+                    "turn_complete": True,
                 }
             }
 
@@ -122,11 +109,7 @@ async def stream_to_gemini_live(
                             if "parts" in model_turn:
                                 for part in model_turn["parts"]:
                                     if "text" in part:
-                                        yield {
-                                            "type": "text",
-                                            "text": part["text"],
-                                            "raw": data
-                                        }
+                                        yield {"type": "text", "text": part["text"], "raw": data}
 
                             # Check if turn is complete
                             if server_content.get("turnComplete", False):
@@ -134,30 +117,23 @@ async def stream_to_gemini_live(
 
                     # Check for errors
                     if "error" in data:
-                        yield {
-                            "type": "error",
-                            "error": data["error"],
-                            "raw": data
-                        }
+                        yield {"type": "error", "error": data["error"], "raw": data}
                         break
 
                 except websockets.exceptions.ConnectionClosed:
                     break
 
     except Exception as e:
-        yield {
-            "type": "error",
-            "error": str(e)
-        }
+        yield {"type": "error", "error": str(e)}
 
 
 def stream_to_gemini_live_sync(
     image_frame: Any,
     text: str = "",
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     model: str = "gemini-2.0-flash-exp",
-    callback: Optional[Callable[[Dict[str, Any]], None]] = None
-) -> List[Dict[str, Any]]:
+    callback: Callable[[dict[str, Any]], None] | None = None,
+) -> list[dict[str, Any]]:
     """
     Synchronous wrapper for stream_to_gemini_live
 
@@ -178,6 +154,7 @@ def stream_to_gemini_live_sync(
         ...     callback=lambda r: print(r.get('text', ''), end='')
         ... )
     """
+
     async def run():
         results = []
         async for response in stream_to_gemini_live(image_frame, text, api_key, model):
@@ -191,10 +168,10 @@ def stream_to_gemini_live_sync(
 
 def send_to_openrouter(
     prompt: str,
-    images: Optional[List[Any]] = None,
+    images: list[Any] | None = None,
     model: str = "google/gemini-2.0-flash-exp:free",
-    api_key: Optional[str] = None
-) -> Dict[str, Any]:
+    api_key: str | None = None,
+) -> dict[str, Any]:
     """
     Send a text prompt and optional images to OpenRouter
 
@@ -215,7 +192,7 @@ def send_to_openrouter(
         ... )
         >>> print(result['choices'][0]['message']['content'])
     """
-    api_key = api_key or os.getenv('OPENROUTER_API_KEY')
+    api_key = api_key or os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OpenRouter API key not set. Set OPENROUTER_API_KEY environment variable or pass api_key parameter")
 
@@ -228,34 +205,23 @@ def send_to_openrouter(
     if images:
         for image in images:
             # Convert frame to base64 if it's a numpy array
-            if hasattr(image, 'shape'):
+            if hasattr(image, "shape"):
                 base64_image = frame_to_base64(image)
             else:
                 base64_image = image  # Assume it's already base64
 
-            content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_image}"
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
                 }
-            })
+            )
 
     # Build the request payload
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": content
-            }
-        ]
-    }
+    payload = {"model": model, "messages": [{"role": "user", "content": content}]}
 
     # Make API request
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     response = requests.post(base_url, headers=headers, json=payload)
     response.raise_for_status()
