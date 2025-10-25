@@ -102,9 +102,33 @@ export class ARStreamingClient extends BaseScriptComponent {
     }
 
     private initialize(): void {
+        this.ensureScreenRegion();
         this.initializeCamera();
         this.initializeAudio();
         this.connectWebSocket();
+    }
+
+    private ensureScreenRegion(): void {
+        if (!this.bboxParent) {
+            print("Error: BBox Parent is not set in the Inspector.");
+            return;
+        }
+
+        let screenRegion = this.bboxParent.getComponent(
+            "Component.ScreenRegionComponent"
+        ) as ScreenRegionComponent;
+        if (!screenRegion) {
+            print(
+                "Warning: BBox Parent is missing a ScreenRegionComponent. Adding one now."
+            );
+            screenRegion = this.bboxParent.createComponent(
+                "Component.ScreenRegionComponent"
+            ) as ScreenRegionComponent;
+        }
+
+        // Ensure it's set to FullFrame for correct anchor mapping
+        screenRegion.region = ScreenRegionType.FullFrame;
+        print("BBox Parent's ScreenRegionComponent is configured to FullFrame.");
     }
 
     private initializeCamera(): void {
@@ -483,7 +507,13 @@ export class ARStreamingClient extends BaseScriptComponent {
         const camera = global.deviceInfoSystem.getTrackingCameraForId(
             CameraModule.CameraId.Default_Color
         );
-        const resolution = camera.resolution;
+        const cameraResolution = camera.resolution;
+
+        // 1. Normalize the pixel coordinates from the model output
+        const normX = bbox.x / cameraResolution.x * 2 - 1;
+        const normY = 1 - bbox.y / cameraResolution.y * 2;
+        const normWidth = bbox.width / cameraResolution.x * 2;
+        const normHeight = bbox.height / cameraResolution.y * 2;
 
         // Create new BoundBox instance
         const bboxInstance = this.boundBoxPrefab.instantiate(this.bboxParent);
@@ -495,21 +525,33 @@ export class ARStreamingClient extends BaseScriptComponent {
         ) as ScreenTransform;
 
         if (screenTransform) {
-            // // Keep anchors at top-left corner (0, 0, 0, 0)
-            // screenTransform.anchors.left = 0;
-            // screenTransform.anchors.top = 0;
+            // 2. Create a Rect for the anchors, flipping the Y-axis
+            // The anchor coordinate system has (0,0) at the bottom-left
+            const anchors = Rect.create(
+                normX, // left
 
-            // Position via offsets (pixels from top-left)
-            screenTransform.offsets.left = bbox.x;
-            screenTransform.offsets.top  = bbox.y;
+                normX + normWidth, // right
+                normY - normHeight, // bottom
+                normY // top
+            );
 
-            // Size – Lens Studio exposes 'width' & 'height' only when fixedWidth/Height are true.
-            // They aren’t in the TypeScript typings, so we cast to 'any'.
-            (screenTransform as any).width  = bbox.width;
-            (screenTransform as any).height = bbox.height;
+            // 3. Apply the normalized Rect to the anchors
+            screenTransform.anchors = anchors;
+
+            // 4. Reset offsets, as position is now fully controlled by anchors
+            screenTransform.offsets.left = 0;
+            screenTransform.offsets.top = 0;
+            screenTransform.offsets.right = 0;
+            screenTransform.offsets.bottom = 0;
 
             print(
-                `BBox created: ${bbox.label} at (${bbox.x}, ${bbox.y}) size (${bbox.width}x${bbox.height})`
+                `BBox created: ${
+                    bbox.label
+                } with anchors (${anchors.left.toFixed(
+                    2
+                )}, ${anchors.bottom.toFixed(2)}) to (${anchors.right.toFixed(
+                    2
+                )}, ${anchors.top.toFixed(2)})`
             );
         }
 
