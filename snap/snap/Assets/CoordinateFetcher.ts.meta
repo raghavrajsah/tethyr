@@ -28,13 +28,11 @@
   ScriptInputsHidden:
     audioComponent: false
     audioReadIntervalMs: false
-    bboxImage: false
     bboxParent: false
     boundBoxPrefab: false
     microphoneAudio: false
     overlayText: false
     prerecordedAudio: false
-    screenTransform: false
     serverUrl: false
     videoFrameSkip: false
   ScriptTypesHidden:
@@ -53,8 +51,6 @@
       overlayText: !<reference.Text> 00000000-0000-0000-0000-000000000000
       boundBoxPrefab: !<reference.ObjectPrefab> 00000000-0000-0000-0000-000000000000
       bboxParent: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
-      bboxImage: !<reference.Image> 00000000-0000-0000-0000-000000000000
-      screenTransform: !<reference.ScreenTransform> 00000000-0000-0000-0000-000000000000
       videoFrameSkip: !<float> 15.000000
       audioReadIntervalMs: !<float> 100.000000
   ScriptTypes:
@@ -68,7 +64,5 @@
     - '// @input Component.Text overlayText {"hint":"Text overlay for displaying instructions"}'
     - '// @input Asset.ObjectPrefab boundBoxPrefab {"hint":"BoundBox prefab for bounding box visualization"}'
     - '// @input SceneObject bboxParent {"hint":"Parent scene object for instantiated bounding boxes"}'
-    - '// @input Component.Image bboxImage {"hint":"Image component for bounding box visualization"}'
-    - '// @input Component.ScreenTransform screenTransform {"hint":"Screen transform for positioning bbox"}'
     - '// @input float videoFrameSkip = 15 {"hint":"Send every Nth video frame"}'
     - '// @input float audioReadIntervalMs = 100 {"hint":"Audio read interval in milliseconds (default 100ms = 10 reads per second)"}'
