@@ -2,8 +2,6 @@ from flask import Flask, render_template, Response, request, jsonify
 import cv2
 import threading
 import time
-import os
-from datetime import datetime
 from ultralytics import YOLO
 
 app = Flask(__name__)
@@ -16,6 +14,7 @@ class Camera:
         self.yoloe_model = None
         self.detection_enabled = True
         self.prompt_text = "person"  # Default prompt - can be changed
+        self.model_lock = threading.Lock()  # Lock for thread-safe model updates
         
     def start(self):
         """Start the camera capture"""
@@ -45,23 +44,19 @@ class Camera:
     
     def _set_detection_prompt(self, prompt):
         """Set the text prompt for YOLOE detection"""
-        self.prompt_text = prompt
-        if self.yoloe_model:
-            # Split by comma for multiple objects
-            classes = [cls.strip() for cls in prompt.split(',')]
-            print(f"Setting YOLOE classes to: {classes}")
+        with self.model_lock:
             try:
-                text_embeddings = self.yoloe_model.get_text_pe(classes)
-                print(f"Text embeddings shape: {text_embeddings.shape if hasattr(text_embeddings, 'shape') else 'N/A'}")
-                self.yoloe_model.set_classes(classes, text_embeddings)
-                print("Successfully set classes")
+                self.prompt_text = prompt
+                if self.yoloe_model:
+                    # Split by comma for multiple objects
+                    classes = [cls.strip() for cls in prompt.split(',')]
+                    print(f"Updating YOLOE to detect: {classes}")
+                    text_embeddings = self.yoloe_model.get_text_pe(classes)
+                    self.yoloe_model.set_classes(classes, text_embeddings)
+                    print(f"Successfully updated detection prompt to: {classes}")
             except Exception as e:
-                print(f"Error setting classes: {e}")
-                # Try alternative approach - just set classes without embeddings
-                print("Trying to detect 'person' instead...")
-                self.prompt_text = "person"
-                classes = ["person"]
-                self.yoloe_model.set_classes(classes, self.yoloe_model.get_text_pe(classes))
+                print(f"ERROR setting detection prompt: {e}")
+                raise  # Re-raise to propagate error to caller
         
     def _capture_frames(self):
         """Continuously capture frames from the camera"""
@@ -81,19 +76,14 @@ class Camera:
     def _process_frame_with_yoloe(self, frame):
         """Process frame with YOLOE and draw bounding boxes"""
         try:
-            # Run YOLOE inference with lower confidence threshold
-            # Note: Using very low confidence to see any detections
-            results = self.yoloe_model.predict(frame, verbose=False, conf=0.05, iou=0.5)
+            # Use lock to prevent race conditions during model updates
+            with self.model_lock:
+                # Run YOLOE inference
+                results = self.yoloe_model.predict(frame, verbose=False, conf=0.1, iou=0.5)
             
             # Draw bounding boxes on the frame
             if len(results) > 0:
                 result = results[0]
-                
-                # Debug: Print detection info
-                if result.boxes is not None:
-                    print(f"Detections found: {len(result.boxes)}")
-                    if len(result.boxes) > 0:
-                        print(f"Confidences: {result.boxes.conf.cpu().numpy()}")
                 
                 # Draw boxes and labels
                 if result.boxes is not None and len(result.boxes) > 0:
@@ -106,9 +96,15 @@ class Camera:
                         confidence = confidences[i]
                         
                         # Get class name
-                        if class_ids is not None and len(result.names) > 0:
+                        if class_ids is not None and result.names:
                             class_id = int(class_ids[i])
-                            label = result.names.get(class_id, self.prompt_text)
+                            # Handle both list and dict formats
+                            if isinstance(result.names, dict):
+                                label = result.names.get(class_id, self.prompt_text)
+                            elif isinstance(result.names, list):
+                                label = result.names[class_id] if class_id < len(result.names) else self.prompt_text
+                            else:
+                                label = self.prompt_text
                         else:
                             label = self.prompt_text
                         
@@ -148,6 +144,7 @@ class Camera:
                             font_thickness
                         )
         except Exception as e:
+            # Log errors but don't crash the frame processing
             print(f"Error in YOLOE processing: {e}")
         
         return frame
@@ -188,32 +185,20 @@ def video_feed():
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/save_photo', methods=['POST'])
-def save_photo():
-    """Save the current camera frame as a photo"""
+@app.route('/set_prompt', methods=['POST'])
+def set_prompt():
+    """Update the detection prompt"""
     try:
-        # Get the current frame from the camera
-        frame = camera.get_frame()
-        if frame is None:
-            return jsonify({'success': False, 'error': 'No frame available'})
+        data = request.get_json()
+        prompt = data.get('prompt', '').strip()
         
-        # Create photos directory if it doesn't exist
-        photos_dir = 'photos'
-        if not os.path.exists(photos_dir):
-            os.makedirs(photos_dir)
+        if not prompt:
+            return jsonify({'success': False, 'error': 'Prompt cannot be empty'})
         
-        # Generate filename with timestamp
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'webcam_photo_{timestamp}.jpg'
-        filepath = os.path.join(photos_dir, filename)
+        # Update the prompt
+        camera._set_detection_prompt(prompt)
         
-        # Save the frame as JPEG
-        success = cv2.imwrite(filepath, frame)
-        
-        if success:
-            return jsonify({'success': True, 'filename': filename})
-        else:
-            return jsonify({'success': False, 'error': 'Failed to save image'})
+        return jsonify({'success': True, 'prompt': camera.prompt_text})
             
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})

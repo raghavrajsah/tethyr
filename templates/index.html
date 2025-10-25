@@ -57,12 +57,34 @@
             color: #5a2d2d;
         }
         
-        .button-container {
+        .prompt-container {
             margin-top: 20px;
             text-align: center;
         }
         
-        .save-button {
+        .prompt-form {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .prompt-input {
+            padding: 12px 16px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            min-width: 250px;
+            transition: border-color 0.3s;
+        }
+        
+        .prompt-input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        .submit-button {
             background-color: #4CAF50;
             color: white;
             padding: 12px 24px;
@@ -74,13 +96,19 @@
             transition: background-color 0.3s;
         }
         
-        .save-button:hover {
+        .submit-button:hover {
             background-color: #45a049;
         }
         
-        .save-button:disabled {
+        .submit-button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
+        }
+        
+        .prompt-hint {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
         }
     </style>
 </head>
@@ -88,7 +116,7 @@
     <h1>📹 Webcam with YOLOE Detection</h1>
     
     <div class="video-container">
-        <div class="status info">
+        <div class="status info" id="current-prompt">
             🎯 Detecting: <strong>person</strong> | Model: YOLOE-11S
         </div>
         <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Webcam Feed">
@@ -97,10 +125,22 @@
         </div>
     </div>
     
-    <div class="button-container">
-        <button class="save-button" id="save-button" onclick="savePhoto()">
-            📸 Save Photo
-        </button>
+    <div class="prompt-container">
+        <form class="prompt-form" onsubmit="updatePrompt(event)">
+            <input 
+                type="text" 
+                class="prompt-input" 
+                id="prompt-input" 
+                placeholder="Enter object to detect (e.g., person, cup, phone)"
+                value="person"
+            />
+            <button type="submit" class="submit-button" id="submit-button">
+                🔄 Update Detection
+            </button>
+        </form>
+        <div class="prompt-hint">
+            💡 Try: person, face, hand, cup, phone, laptop, book, or multiple objects separated by commas
+        </div>
     </div>
     
     <script>
@@ -132,34 +172,47 @@
             }
         };
         
-        // Save photo functionality
-        function savePhoto() {
-            const button = document.getElementById('save-button');
-            const originalText = button.textContent;
+        // Update detection prompt functionality
+        function updatePrompt(event) {
+            event.preventDefault();
+            
+            const button = document.getElementById('submit-button');
+            const input = document.getElementById('prompt-input');
+            const currentPromptDiv = document.getElementById('current-prompt');
+            const prompt = input.value.trim();
+            
+            if (!prompt) {
+                status.textContent = '❌ Please enter a valid prompt';
+                status.className = 'status error';
+                return;
+            }
             
             // Disable button and show loading state
+            const originalText = button.textContent;
             button.disabled = true;
-            button.textContent = '💾 Saving...';
+            button.textContent = '⏳ Updating...';
             
-            // Send request to save current frame
-            fetch('/save_photo', {
+            // Send request to update prompt
+            fetch('/set_prompt', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                }
+                },
+                body: JSON.stringify({ prompt: prompt })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    status.textContent = `✅ Photo saved as ${data.filename}`;
+                    currentPromptDiv.innerHTML = `🎯 Detecting: <strong>${data.prompt}</strong> | Model: YOLOE-11S`;
+                    status.textContent = `✅ Now detecting: ${data.prompt}`;
                     status.className = 'status';
                 } else {
-                    status.textContent = '❌ Failed to save photo';
+                    status.textContent = `❌ Error: ${data.error}`;
                     status.className = 'status error';
                 }
             })
             .catch(error => {
-                status.textContent = '❌ Error saving photo';
+                status.textContent = '❌ Failed to update prompt';
                 status.className = 'status error';
             })
             .finally(() => {
