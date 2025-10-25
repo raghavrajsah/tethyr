@@ -26,10 +26,13 @@
   ExportUid: 00000000-0000-0000-0000-000000000000
   PackagePolicy: CanBeUnpacked
   ScriptInputsHidden:
-    frameSkip: false
-    labelMarker: false
-    labelText: false
+    audioFrameSkip: false
+    bboxImage: false
+    microphoneAudio: false
+    overlayText: false
+    screenTransform: false
     serverUrl: false
+    videoFrameSkip: false
   ScriptTypesHidden:
     {}
   ReadMe: !<reference> 00000000-0000-0000-0000-000000000000
@@ -39,15 +42,21 @@
   Attachments:
     []
   DefaultScriptInputs:
-    - serverUrl: "http://localhost:5000"
-      labelMarker: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
-      labelText: !<reference.Text> 00000000-0000-0000-0000-000000000000
-      frameSkip: !<float> 60.000000
+    - microphoneAudio: !<reference.AudioTrackAsset> 00000000-0000-0000-0000-000000000000
+      serverUrl: "http://localhost:5000"
+      overlayText: !<reference.Text> 00000000-0000-0000-0000-000000000000
+      bboxImage: !<reference.Image> 00000000-0000-0000-0000-000000000000
+      screenTransform: !<reference.ScreenTransform> 00000000-0000-0000-0000-000000000000
+      videoFrameSkip: !<float> 15.000000
+      audioFrameSkip: !<float> 10.000000
   ScriptTypes:
     -
       {}
   InputLines:
-    - '// @input string serverUrl = "http://localhost:5000" {"hint":"Your localhost server URL, e.g., http://localhost:5000"}'
-    - '// @input SceneObject labelMarker {"hint":"Visual marker to position at returned coordinates"}'
-    - '// @input Component.Text labelText {"hint":"Text component to display label"}'
-    - '// @input float frameSkip = 60 {"hint":"Process every Nth frame (e.g., 30 = once per second at 30fps)"}'
+    - '// @input Asset.AudioTrackAsset microphoneAudio {"hint":"Audio From Microphone asset"}'
+    - '// @input string serverUrl = "ws://192.168.1.100:5000" {"hint":"WebSocket server URL, e.g., ws://192.168.1.100:5000"}'
+    - '// @input Component.Text overlayText {"hint":"Text overlay for displaying instructions"}'
+    - '// @input Component.Image bboxImage {"hint":"Image component for bounding box visualization"}'
+    - '// @input Component.ScreenTransform screenTransform {"hint":"Screen transform for positioning bbox"}'
+    - '// @input float videoFrameSkip = 15 {"hint":"Send every Nth video frame"}'
+    - '// @input float audioFrameSkip = 10 {"hint":"Send audio every Nth frame"}'

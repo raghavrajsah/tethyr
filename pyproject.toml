@@ -16,6 +16,8 @@ dependencies = [
     "ollama>=0.6.0",
     "websockets>=15.0.1",
     "numpy>=2.2.6",
+    "pillow>=12.0.0",
+    "loguru>=0.7.3",
 ]
 
 [dependency-groups]
