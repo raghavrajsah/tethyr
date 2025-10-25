@@ -63,7 +63,6 @@ htmlcov/
 .tox/
 
 # Project specific
-photos/
 *.jpg
 *.jpeg
 *.png
@@ -99,3 +98,7 @@ pip-delete-this-directory.txt
 *.temp
 tmp/
 temp/
+
+# model files
+*.pt
+mobileclip_blt.ts
