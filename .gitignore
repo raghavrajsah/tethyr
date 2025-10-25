@@ -79,6 +79,11 @@ credentials.json
 mark_plan.md
 notes.md
 TODO.md
+PROJECT_STATUS.md
+GEMINI_SETUP_STATUS.md
+SETUP_COMPLETE.md
+GEMINI_LIVE_ACTIVE.md
+test_gemini_live.py
 
 # OS
 .DS_Store
@@ -102,3 +107,9 @@ temp/
 # model files
 *.pt
 mobileclip_blt.ts
+
+# Ignore the file
+CONTEXT_SYSTEM_GUIDE.md
+LLM_INTEGRATION_GUIDE.md
+GEMINI_LIVE_EXAMPLE.md
+architecture.md
