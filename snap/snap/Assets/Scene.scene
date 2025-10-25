@@ -1880,7 +1880,7 @@
     []
   Name: Canvas
   Enabled: true
-  UnitType: Points
+  UnitType: Pixels
   SortingType: Hierarchy
   WorldSpaceRect:
     left: -15.000000
