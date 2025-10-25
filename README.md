@@ -27,9 +27,7 @@ An AI-powered AR glasses development platform with real-time computer vision, ob
 **To add new AI tools**: Create functions in `ai_client.py` or `ollama_client.py` following existing patterns
 
 ### Backend Servers
-- **`snap/server.py`**: Flask server for AR glasses (port 5000)
-  - Receives frames from glasses
-  - Returns coordinates and labels for AR overlay
+- **`main.py`**: WebSocket server for AR glasses (port 5000)
 - **`app.py`**: Webcam webapp (port 5001)
   - Camera feed display
   - Frame analysis with AI models
@@ -48,7 +46,7 @@ pip install -r requirements.txt
 
 ### Start AR Glasses Server
 ```bash
-python snap/server.py
+python main.py
 ```
 
 ### Start Webcam Webapp

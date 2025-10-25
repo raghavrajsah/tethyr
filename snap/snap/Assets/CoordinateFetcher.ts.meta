@@ -26,10 +26,12 @@
   ExportUid: 00000000-0000-0000-0000-000000000000
   PackagePolicy: CanBeUnpacked
   ScriptInputsHidden:
-    audioFrameSkip: false
+    audioComponent: false
+    audioReadIntervalMs: false
     bboxImage: false
     microphoneAudio: false
     overlayText: false
+    prerecordedAudio: false
     screenTransform: false
     serverUrl: false
     videoFrameSkip: false
@@ -43,20 +45,24 @@
     []
   DefaultScriptInputs:
     - microphoneAudio: !<reference.AudioTrackAsset> 00000000-0000-0000-0000-000000000000
+      prerecordedAudio: !<reference.AudioTrackAsset> 00000000-0000-0000-0000-000000000000
+      audioComponent: !<reference.AudioComponent> 00000000-0000-0000-0000-000000000000
       serverUrl: "http://localhost:5000"
       overlayText: !<reference.Text> 00000000-0000-0000-0000-000000000000
       bboxImage: !<reference.Image> 00000000-0000-0000-0000-000000000000
       screenTransform: !<reference.ScreenTransform> 00000000-0000-0000-0000-000000000000
       videoFrameSkip: !<float> 15.000000
-      audioFrameSkip: !<float> 10.000000
+      audioReadIntervalMs: !<float> 100.000000
   ScriptTypes:
     -
       {}
   InputLines:
-    - '// @input Asset.AudioTrackAsset microphoneAudio {"hint":"Audio From Microphone asset"}'
+    - '// @input Asset.AudioTrackAsset microphoneAudio {"hint":"Audio From Microphone asset (leave empty if using prerecorded audio)"}'
+    - '// @input Asset.AudioTrackAsset prerecordedAudio {"hint":"Pre-recorded Audio Track asset for testing (leave empty if using microphone)"}'
+    - '// @input Component.AudioComponent audioComponent {"hint":"Audio Component for playing pre-recorded audio (required if using prerecorded audio)"}'
     - '// @input string serverUrl = "ws://192.168.1.100:5000" {"hint":"WebSocket server URL, e.g., ws://192.168.1.100:5000"}'
     - '// @input Component.Text overlayText {"hint":"Text overlay for displaying instructions"}'
     - '// @input Component.Image bboxImage {"hint":"Image component for bounding box visualization"}'
     - '// @input Component.ScreenTransform screenTransform {"hint":"Screen transform for positioning bbox"}'
     - '// @input float videoFrameSkip = 15 {"hint":"Send every Nth video frame"}'
-    - '// @input float audioFrameSkip = 10 {"hint":"Send audio every Nth frame"}'
+    - '// @input float audioReadIntervalMs = 100 {"hint":"Audio read interval in milliseconds (default 100ms = 10 reads per second)"}'

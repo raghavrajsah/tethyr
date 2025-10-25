@@ -4,9 +4,11 @@ import io
 import json
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
+import scipy.io.wavfile as wavfile
 from loguru import logger
 from PIL import Image
 from websockets import ConnectionClosed
@@ -122,6 +124,9 @@ class ClientState:
     frame_count: int = 0
     audio_buffer: list[np.ndarray] = None
     last_detection: dict | None = None
+    output_dir: Path | None = None
+    audio_sample_rate: int = 16000
+    audio_channels: int = 1
 
     def __post_init__(self):
         if self.audio_buffer is None:
@@ -129,6 +134,77 @@ class ClientState:
 
 
 clients: dict[str, ClientState] = {}
+
+
+def setup_output_directory(client_id: str) -> Path:
+    """
+    Create output directory for this client session
+
+    Args:
+        client_id: Unique client identifier
+
+    Returns:
+        Path to the output directory
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path("output") / f"session_{client_id}_{timestamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create subdirectories for frames
+    (output_dir / "frames").mkdir(exist_ok=True)
+
+    logger.info(f"Created output directory: {output_dir}")
+    return output_dir
+
+
+def save_audio_buffer(client_state: ClientState) -> None:
+    """
+    Save accumulated audio buffer as a .wav file
+
+    Args:
+        client_state: Client state containing audio buffer and metadata
+    """
+    if not client_state.audio_buffer or not client_state.output_dir:
+        logger.warning(f"No audio to save for client {client_state.client_id}")
+        return
+
+    try:
+        # Concatenate all audio chunks
+        audio_data = np.concatenate(client_state.audio_buffer)
+
+        # Reshape for multi-channel audio if needed
+        if client_state.audio_channels > 1:
+            # Interleaved format: [L, R, L, R, ...]
+            audio_data = audio_data.reshape(-1, client_state.audio_channels)
+
+        # Save as WAV file
+        output_path = client_state.output_dir / "audio.wav"
+        wavfile.write(output_path, client_state.audio_sample_rate, audio_data)
+
+        duration_sec = len(audio_data) / client_state.audio_sample_rate / client_state.audio_channels
+        logger.info(
+            f"Saved audio for client {client_state.client_id}: "
+            f"{output_path} ({duration_sec:.2f} seconds, "
+            f"{client_state.audio_sample_rate}Hz, {client_state.audio_channels} channels)"
+        )
+
+        # Save session metadata
+        metadata_path = client_state.output_dir / "session_metadata.json"
+        metadata = {
+            "client_id": client_state.client_id,
+            "session_timestamp": datetime.now().isoformat(),
+            "video_frames": client_state.frame_count,
+            "audio_chunks": len(client_state.audio_buffer),
+            "audio_duration_seconds": duration_sec,
+            "audio_sample_rate": client_state.audio_sample_rate,
+            "audio_channels": client_state.audio_channels,
+        }
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        logger.info(f"Saved session metadata to {metadata_path}")
+
+    except Exception as e:
+        logger.error(f"Error saving audio for client {client_state.client_id}: {e}")
 
 
 def process_video_frame(image: Image.Image, frame_info: dict) -> ServerMessage | None:
@@ -191,11 +267,19 @@ def process_audio_chunk(
     Returns:
         ServerMessage or None
 
+    Audio Timing Notes:
+    - Audio chunks are sent at regular intervals (default 100ms) from the client
+    - Sample rate is typically 16000 Hz
+    - Each chunk contains approximately (sample_rate * interval_seconds) samples
+    - For pre-recorded audio, timing is synchronized with actual playback (no speed-up)
+    - Audio will loop indefinitely if using pre-recorded source
+
     TODO: Replace with your actual audio processing logic:
     - Speech-to-text (Whisper, Google Speech API, etc.)
     - Voice command detection
     - Audio event detection
     - Speaker identification
+    - Audio buffering for context-aware processing
     - etc.
     """
     # Example: Simple volume-based detection
@@ -306,7 +390,10 @@ def serialize_server_message(message: ServerMessage) -> str:
 
 async def handle_handshake(message: HandshakeMessage, client_state: ClientState):
     """Handle initial handshake from client"""
-    print(f"Handshake from {client_state.client_id}: {message.device}")
+    logger.info(f"Handshake from {client_state.client_id}: {message.device}")
+
+    # Set up output directory for this session
+    client_state.output_dir = setup_output_directory(client_state.client_id)
 
     response = HandshakeAckMessage(
         type="handshake_ack",
@@ -328,6 +415,15 @@ async def handle_video_frame(message: VideoFrameMessage, client_state: ClientSta
         img_bytes = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(img_bytes))
 
+        # Save frame to disk
+        if client_state.output_dir:
+            frame_filename = f"frame_{message.frame_number:06d}.jpg"
+            frame_path = client_state.output_dir / "frames" / frame_filename
+            image.save(frame_path, quality=95)
+
+            if message.frame_number % 30 == 0:  # Log every 30 frames
+                logger.debug(f"Saved frame {message.frame_number} to {frame_path}")
+
         # Process frame
         frame_info = {
             "frame_number": message.frame_number,
@@ -345,7 +441,7 @@ async def handle_video_frame(message: VideoFrameMessage, client_state: ClientSta
         client_state.frame_count += 1
 
     except Exception as e:
-        print(f"Error handling video frame: {e}")
+        logger.error(f"Error handling video frame from client {client_state.client_id}: {e}")
 
 
 async def handle_audio_chunk(message: AudioChunkMessage, client_state: ClientState):
@@ -358,13 +454,35 @@ async def handle_audio_chunk(message: AudioChunkMessage, client_state: ClientSta
         num_samples = len(audio_bytes) // 4
         audio_data = np.frombuffer(audio_bytes, dtype=np.float32, count=num_samples)
 
+        # Calculate audio chunk duration
+        duration_ms = (message.samples / message.sample_rate) * 1000
+
+        # Store audio metadata (sample rate and channels) from first chunk
+        if len(client_state.audio_buffer) == 0:
+            client_state.audio_sample_rate = message.sample_rate
+            client_state.audio_channels = message.channels
+            logger.info(
+                f"Audio configuration for client {client_state.client_id}: "
+                f"{message.sample_rate}Hz, {message.channels} channels"
+            )
+
         # Process audio
         audio_info = {
             "sample_rate": message.sample_rate,
             "samples": message.samples,
             "channels": message.channels,
             "timestamp": message.timestamp,
+            "duration_ms": duration_ms,
         }
+
+        # Log audio info periodically (every 10 chunks)
+        if len(client_state.audio_buffer) % 10 == 0:
+            logger.debug(
+                f"Audio chunk from client {client_state.client_id}: "
+                f"{message.samples} samples, {message.channels} channels, "
+                f"{duration_ms:.1f}ms duration, {message.sample_rate}Hz "
+                f"(total buffered: {len(client_state.audio_buffer)} chunks)"
+            )
 
         # PLACEHOLDER: Call your audio processing function
         instruction = process_audio_chunk(audio_data, audio_info)
@@ -372,13 +490,11 @@ async def handle_audio_chunk(message: AudioChunkMessage, client_state: ClientSta
         if instruction:
             await client_state.websocket.send(serialize_server_message(instruction))
 
-        # Optionally buffer audio for longer-context processing
+        # Buffer ALL audio chunks for saving at the end of the session
         client_state.audio_buffer.append(audio_data)
-        if len(client_state.audio_buffer) > 10:  # Keep last 10 chunks
-            client_state.audio_buffer.pop(0)
 
     except Exception as e:
-        print(f"Error handling audio chunk: {e}")
+        logger.error(f"Error handling audio chunk from client {client_state.client_id}: {e}")
 
 
 # ============================================================================
@@ -438,6 +554,16 @@ async def handle_client(websocket: ServerConnection):
         logger.info(f"Client {client_id} disconnected")
     finally:
         if str(client_id) in clients:
+            # Save audio buffer to .wav file before cleanup
+            save_audio_buffer(client_state)
+
+            # Log session statistics
+            logger.info(
+                f"Session complete for client {client_id}: "
+                f"{client_state.frame_count} video frames, "
+                f"{len(client_state.audio_buffer)} audio chunks"
+            )
+
             del clients[str(client_id)]
         logger.info(f"Client {client_id} removed. Total clients: {len(clients)}")
 

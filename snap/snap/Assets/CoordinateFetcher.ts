@@ -1,3 +1,19 @@
+/**
+ * ARStreamingClient
+ *
+ * Streams video and audio from Spectacles to a WebSocket server for processing.
+ *
+ * Audio Configuration:
+ * - For MICROPHONE input: Assign only the microphoneAudio input
+ * - For PRE-RECORDED audio: Assign both prerecordedAudio AND audioComponent inputs
+ *   - The audioComponent must reference the same audio track for proper playback synchronization
+ *   - Pre-recorded audio will loop indefinitely (-1 loop count)
+ *
+ * Timing:
+ * - Video frames are sent every Nth frame (configurable via videoFrameSkip)
+ * - Audio is read at a fixed time interval (configurable via audioReadIntervalMs)
+ * - Default audio interval is 100ms (10 reads/sec) to prevent speed-up issues
+ */
 @component
 export class ARStreamingClient extends BaseScriptComponent {
     // Modules
@@ -10,12 +26,29 @@ export class ARStreamingClient extends BaseScriptComponent {
 
     // Audio related
     @input
-    @hint("Audio From Microphone asset")
+    @hint(
+        "Audio From Microphone asset (leave empty if using prerecorded audio)"
+    )
     microphoneAudio: AudioTrackAsset | undefined;
 
+    @input
+    @hint(
+        "Pre-recorded Audio Track asset for testing (leave empty if using microphone)"
+    )
+    prerecordedAudio: AudioTrackAsset | undefined;
+
+    @input
+    @hint(
+        "Audio Component for playing pre-recorded audio (required if using prerecorded audio)"
+    )
+    audioComponent: AudioComponent | undefined;
+
     private microphoneProvider: MicrophoneAudioProvider | null = null;
+    private fileAudioProvider: FileAudioTrackProvider | null = null;
     private audioSampleRate: number = 16000;
     private audioReadBuffer: Float32Array | null = null;
+    private usePrerecordedAudio: boolean = false;
+    private lastAudioReadTime: number = 0;
 
     // WebSocket
     private socket: WebSocket | null = null;
@@ -47,8 +80,8 @@ export class ARStreamingClient extends BaseScriptComponent {
     videoFrameSkip: number = 15;
 
     @input
-    @hint("Send audio every Nth frame")
-    audioFrameSkip: number = 10;
+    @hint("Audio read interval in milliseconds (default 100ms = 10 reads per second)")
+    audioReadIntervalMs: number = 100;
 
     onAwake() {
         this.createEvent("OnStartEvent").bind(() => {
@@ -86,8 +119,51 @@ export class ARStreamingClient extends BaseScriptComponent {
     }
 
     private initializeAudio(): void {
+        // Check if using pre-recorded audio for testing
+        if (this.prerecordedAudio && this.audioComponent) {
+            this.usePrerecordedAudio = true;
+            const control = this.prerecordedAudio.control;
+
+            if (control.isOfType("Provider.FileAudioTrackProvider")) {
+                this.fileAudioProvider = control as FileAudioTrackProvider;
+                this.fileAudioProvider.sampleRate = this.audioSampleRate;
+
+                print(
+                    `Pre-recorded audio initialized at ${this.audioSampleRate}Hz`
+                );
+                print(`Max frame size: ${this.fileAudioProvider.maxFrameSize}`);
+
+                this.audioReadBuffer = new Float32Array(
+                    this.fileAudioProvider.maxFrameSize
+                );
+
+                // Set the audio track on the component
+                this.audioComponent.audioTrack = this.prerecordedAudio;
+
+                // Start playing the audio on loop for continuous testing
+                // -1 means loop indefinitely
+                this.audioComponent.play(-1);
+
+                print("Pre-recorded audio started playing (looping indefinitely)");
+                print(`Audio component is playing: ${this.audioComponent.isPlaying()}`);
+
+                // Calculate expected samples per read interval
+                const samplesPerInterval = (this.audioSampleRate * this.audioReadIntervalMs) / 1000;
+                print(`Expected samples per ${this.audioReadIntervalMs}ms: ~${samplesPerInterval}`);
+            } else {
+                print(
+                    "Error: Prerecorded audio asset is not a file audio provider"
+                );
+                this.usePrerecordedAudio = false;
+            }
+            return;
+        }
+
+        // Otherwise, use microphone
         if (!this.microphoneAudio) {
-            print("Warning: No microphone audio asset assigned");
+            print(
+                "Warning: No audio source assigned (neither microphone nor prerecorded)"
+            );
             return;
         }
 
@@ -126,7 +202,12 @@ export class ARStreamingClient extends BaseScriptComponent {
                 device: "spectacles",
                 capabilities: {
                     video: true,
-                    audio: this.microphoneProvider !== null,
+                    audio:
+                        this.microphoneProvider !== null ||
+                        this.fileAudioProvider !== null,
+                    audioSource: this.usePrerecordedAudio
+                        ? "prerecorded"
+                        : "microphone",
                 },
             });
         };
@@ -170,14 +251,46 @@ export class ARStreamingClient extends BaseScriptComponent {
             return;
         }
 
-        const audioShape = this.microphoneProvider.getAudioFrame(
-            this.audioReadBuffer
-        );
+        // Time-based throttling for audio reading to prevent speed-up
+        const currentTime = Date.now();
+        const timeSinceLastRead = currentTime - this.lastAudioReadTime;
+
+        // Only read audio at the configured interval (default 100ms = 10 times per second)
+        if (timeSinceLastRead < this.audioReadIntervalMs) {
+            return;
+        }
+
+        // For pre-recorded audio, check if the audio component is actually playing
+        if (this.usePrerecordedAudio) {
+            if (!this.audioComponent || !this.audioComponent.isPlaying()) {
+                // Audio is not playing, don't read frames
+                return;
+            }
+        }
+
+        // Read audio from the appropriate source
+        let audioProvider:
+            | MicrophoneAudioProvider
+            | FileAudioTrackProvider
+            | null = null;
+
+        if (this.usePrerecordedAudio && this.fileAudioProvider) {
+            audioProvider = this.fileAudioProvider;
+        } else if (this.microphoneProvider) {
+            audioProvider = this.microphoneProvider;
+        }
+
+        if (!audioProvider || !this.audioReadBuffer) {
+            return;
+        }
+
+        const audioShape = audioProvider.getAudioFrame(this.audioReadBuffer);
         const samples = audioShape.x;
         const channels = audioShape.y;
 
-        if (samples > 0 && this.frameCounter % this.audioFrameSkip === 0) {
+        if (samples > 0) {
             this.sendAudioChunk(this.audioReadBuffer, samples, channels);
+            this.lastAudioReadTime = currentTime;
         }
     }
 
@@ -219,16 +332,20 @@ export class ARStreamingClient extends BaseScriptComponent {
         samples: number,
         channels: number
     ): void {
-        if (!this.microphoneProvider) {
-            // Extra guard
+        if (!this.microphoneProvider && !this.fileAudioProvider) {
+            // Extra guard - no audio source available
             return;
         }
 
         try {
-            // Debug output
-            if (this.frameCounter % 60 === 0) {
+            // Debug output - log every 10 audio chunks
+            if (this.frameCounter % 10 === 0) {
+                const source = this.usePrerecordedAudio
+                    ? "prerecorded"
+                    : "microphone";
+                const durationMs = (samples / this.audioSampleRate) * 1000;
                 print(
-                    `Sending audio: samples=${samples}, channels=${channels}`
+                    `Sending audio (${source}): samples=${samples}, channels=${channels}, duration=${durationMs.toFixed(1)}ms`
                 );
             }
 
@@ -398,6 +515,9 @@ export class ARStreamingClient extends BaseScriptComponent {
     private cleanup(): void {
         if (this.microphoneProvider) {
             this.microphoneProvider.stop();
+        }
+        if (this.audioComponent && this.usePrerecordedAudio) {
+            this.audioComponent.stop(false);
         }
         if (this.socket) {
             this.socket.close();
