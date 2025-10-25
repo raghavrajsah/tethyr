@@ -4,6 +4,7 @@ import threading
 import time
 import os
 from datetime import datetime
+from ultralytics import YOLO
 
 app = Flask(__name__)
 
@@ -12,6 +13,9 @@ class Camera:
         self.camera = None
         self.frame = None
         self.is_running = False
+        self.yoloe_model = None
+        self.detection_enabled = True
+        self.prompt_text = "head"  # Default prompt - can be changed
         
     def start(self):
         """Start the camera capture"""
@@ -24,12 +28,28 @@ class Camera:
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.camera.set(cv2.CAP_PROP_FPS, 30)
         
+        # Initialize YOLOE model
+        print("Loading YOLOE model...")
+        self.yoloe_model = YOLO("yoloe-11s-seg.pt")
+        
+        # Set custom classes for detection
+        self._set_detection_prompt(self.prompt_text)
+        print(f"YOLOE model loaded with prompt: '{self.prompt_text}'")
+        
         self.is_running = True
         
         # Start a thread to continuously capture frames
         self.capture_thread = threading.Thread(target=self._capture_frames)
         self.capture_thread.daemon = True
         self.capture_thread.start()
+    
+    def _set_detection_prompt(self, prompt):
+        """Set the text prompt for YOLOE detection"""
+        self.prompt_text = prompt
+        if self.yoloe_model:
+            # Split by comma for multiple objects
+            classes = [cls.strip() for cls in prompt.split(',')]
+            self.yoloe_model.set_classes(classes, self.yoloe_model.get_text_pe(classes))
         
     def _capture_frames(self):
         """Continuously capture frames from the camera"""
@@ -37,8 +57,81 @@ class Camera:
             ret, frame = self.camera.read()
             if ret:
                 # Flip the frame horizontally for mirror effect
-                self.frame = cv2.flip(frame, 1)
+                frame = cv2.flip(frame, 1)
+                
+                # Run YOLOE detection if enabled
+                if self.detection_enabled and self.yoloe_model:
+                    frame = self._process_frame_with_yoloe(frame)
+                
+                self.frame = frame
             time.sleep(0.03)  # ~30 FPS
+    
+    def _process_frame_with_yoloe(self, frame):
+        """Process frame with YOLOE and draw bounding boxes"""
+        try:
+            # Run YOLOE inference
+            results = self.yoloe_model.predict(frame, verbose=False, conf=0.25)
+            
+            # Draw bounding boxes on the frame
+            if len(results) > 0:
+                result = results[0]
+                
+                # Draw boxes and labels
+                if result.boxes is not None and len(result.boxes) > 0:
+                    boxes = result.boxes.xyxy.cpu().numpy()  # Get box coordinates
+                    confidences = result.boxes.conf.cpu().numpy()  # Get confidence scores
+                    class_ids = result.boxes.cls.cpu().numpy() if result.boxes.cls is not None else None
+                    
+                    for i, box in enumerate(boxes):
+                        x1, y1, x2, y2 = map(int, box)
+                        confidence = confidences[i]
+                        
+                        # Get class name
+                        if class_ids is not None and len(result.names) > 0:
+                            class_id = int(class_ids[i])
+                            label = result.names.get(class_id, self.prompt_text)
+                        else:
+                            label = self.prompt_text
+                        
+                        # Draw bounding box
+                        color = (0, 255, 0)  # Green color
+                        thickness = 2
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+                        
+                        # Draw label with confidence
+                        label_text = f"{label}: {confidence:.2f}"
+                        font = cv2.FONT_HERSHEY_SIMPLEX
+                        font_scale = 0.6
+                        font_thickness = 2
+                        
+                        # Get text size for background
+                        (text_width, text_height), baseline = cv2.getTextSize(
+                            label_text, font, font_scale, font_thickness
+                        )
+                        
+                        # Draw background rectangle for text
+                        cv2.rectangle(
+                            frame,
+                            (x1, y1 - text_height - 10),
+                            (x1 + text_width, y1),
+                            color,
+                            -1  # Filled rectangle
+                        )
+                        
+                        # Draw text
+                        cv2.putText(
+                            frame,
+                            label_text,
+                            (x1, y1 - 5),
+                            font,
+                            font_scale,
+                            (0, 0, 0),  # Black text
+                            font_thickness
+                        )
+        except Exception as e:
+            print(f"Error in YOLOE processing: {e}")
+        
+        return frame
             
     def get_frame(self):
         """Get the latest frame"""

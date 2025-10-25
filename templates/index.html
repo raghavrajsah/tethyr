@@ -43,6 +43,13 @@
             border-radius: 5px;
             color: #2d5a2d;
             text-align: center;
+            font-size: 14px;
+        }
+        
+        .info {
+            background-color: #e8f0ff;
+            color: #2d3d5a;
+            margin-bottom: 15px;
         }
         
         .error {
@@ -78,12 +85,15 @@
     </style>
 </head>
 <body>
-    <h1>📹 Webcam Viewer</h1>
+    <h1>📹 Webcam with YOLOE Detection</h1>
     
     <div class="video-container">
+        <div class="status info">
+            🎯 Detecting: <strong>head</strong> | Model: YOLOE-11S
+        </div>
         <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Webcam Feed">
         <div class="status" id="status">
-            ✅ Camera is running
+            ✅ Camera and YOLOE are running
         </div>
     </div>
     
@@ -104,7 +114,7 @@
         };
         
         videoStream.onload = function() {
-            status.textContent = '✅ Camera is running';
+            status.textContent = '✅ Camera and YOLOE are running';
             status.className = 'status';
         };
         
