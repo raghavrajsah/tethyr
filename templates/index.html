@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcam Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .video-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 100%;
+        }
+        
+        #video-stream {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 8px;
+            display: block;
+        }
+        
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e8f5e8;
+            border-radius: 5px;
+            color: #2d5a2d;
+            text-align: center;
+        }
+        
+        .error {
+            background-color: #ffe8e8;
+            color: #5a2d2d;
+        }
+        
+        .button-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .save-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        .save-button:hover {
+            background-color: #45a049;
+        }
+        
+        .save-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>📹 Webcam Viewer</h1>
+    
+    <div class="video-container">
+        <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Webcam Feed">
+        <div class="status" id="status">
+            ✅ Camera is running
+        </div>
+    </div>
+    
+    <div class="button-container">
+        <button class="save-button" id="save-button" onclick="savePhoto()">
+            📸 Save Photo
+        </button>
+    </div>
+    
+    <script>
+        // Handle video stream errors
+        const videoStream = document.getElementById('video-stream');
+        const status = document.getElementById('status');
+        
+        videoStream.onerror = function() {
+            status.textContent = '❌ Error loading video stream';
+            status.className = 'status error';
+        };
+        
+        videoStream.onload = function() {
+            status.textContent = '✅ Camera is running';
+            status.className = 'status';
+        };
+        
+        // Auto-refresh the page if the stream fails
+        let errorCount = 0;
+        videoStream.onerror = function() {
+            errorCount++;
+            if (errorCount > 3) {
+                status.textContent = '❌ Camera not available. Please check your camera permissions.';
+                status.className = 'status error';
+            } else {
+                setTimeout(() => {
+                    videoStream.src = "{{ url_for('video_feed') }}?" + new Date().getTime();
+                }, 1000);
+            }
+        };
+        
+        // Save photo functionality
+        function savePhoto() {
+            const button = document.getElementById('save-button');
+            const originalText = button.textContent;
+            
+            // Disable button and show loading state
+            button.disabled = true;
+            button.textContent = '💾 Saving...';
+            
+            // Send request to save current frame
+            fetch('/save_photo', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    status.textContent = `✅ Photo saved as ${data.filename}`;
+                    status.className = 'status';
+                } else {
+                    status.textContent = '❌ Failed to save photo';
+                    status.className = 'status error';
+                }
+            })
+            .catch(error => {
+                status.textContent = '❌ Error saving photo';
+                status.className = 'status error';
+            })
+            .finally(() => {
+                // Re-enable button
+                button.disabled = false;
+                button.textContent = originalText;
+            });
+        }
+    </script>
+</body>
+</html>
