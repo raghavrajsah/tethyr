@@ -65,20 +65,11 @@ export class ARStreamingClient extends BaseScriptComponent {
 
     @input
     @hint("BoundBox prefab for bounding box visualization")
-    boundBoxPrefab: ObjectPrefab | undefined;
+    boundBoxPrefab: ObjectPrefab;
 
     @input
     @hint("Parent scene object for instantiated bounding boxes")
-    bboxParent: SceneObject | undefined;
-
-    // Legacy single bbox support (deprecated)
-    @input
-    @hint("Image component for bounding box visualization")
-    bboxImage: Image | undefined;
-
-    @input
-    @hint("Screen transform for positioning bbox")
-    screenTransform: ScreenTransform | undefined;
+    bboxParent: SceneObject;
 
     // Active bounding boxes tracking
     private activeBoundBoxes: Map<string, SceneObject> = new Map();
@@ -488,15 +479,7 @@ export class ARStreamingClient extends BaseScriptComponent {
 
         const bbox = message.bbox;
         const bboxKey = `${bbox.label}_${bbox.x}_${bbox.y}`;
-
-        // Use new prefab-based system if available
-        if (this.boundBoxPrefab && this.bboxParent) {
-            this.createOrUpdateBoundBox(bboxKey, bbox, message.color);
-        } 
-        // Fallback to legacy single bbox system
-        else if (this.bboxImage && this.screenTransform) {
-            this.updateLegacyBoundBox(bbox, message.color);
-        }
+        this.createOrUpdateBoundBox(bboxKey, bbox, message.color);
     }
 
     private createOrUpdateBoundBox(
@@ -504,10 +487,6 @@ export class ARStreamingClient extends BaseScriptComponent {
         bbox: any,
         color: any
     ): void {
-        if (!this.boundBoxPrefab || !this.bboxParent) {
-            return;
-        }
-
         const camera = global.deviceInfoSystem.getTrackingCameraForId(
             CameraModule.CameraId.Default_Color
         );
@@ -581,56 +560,9 @@ export class ARStreamingClient extends BaseScriptComponent {
         bboxInstance.enabled = true;
     }
 
-    private updateLegacyBoundBox(bbox: any, color: any): void {
-        if (!this.bboxImage || !this.screenTransform) {
-            return;
-        }
-
-        const camera = global.deviceInfoSystem.getTrackingCameraForId(
-            CameraModule.CameraId.Default_Color
-        );
-        const resolution = camera.resolution;
-
-        // Convert pixel coordinates to normalized screen coordinates (0-1)
-        const left = bbox.x / resolution.x;
-        const top = bbox.y / resolution.y;
-        const width = bbox.width / resolution.x;
-        const height = bbox.height / resolution.y;
-
-        // Position and scale the bbox image
-        this.screenTransform.anchors.setCenter(
-            new vec2(left + width / 2, top + height / 2)
-        );
-        this.screenTransform.anchors.setSize(new vec2(width, height));
-
-        // Make visible
-        this.bboxImage.enabled = true;
-
-        print(
-            `BBox positioned: ${bbox.label || "Object"} at (${bbox.x}, ${
-                bbox.y
-            })`
-        );
-
-        // Optional: apply color if provided
-        if (color && this.bboxImage.mainMaterial) {
-            this.bboxImage.mainMaterial.mainPass.baseColor = new vec4(
-                color.r,
-                color.g,
-                color.b,
-                color.a
-            );
-        }
-    }
-
     private clearAllOverlays(): void {
         if (this.overlayText) {
             this.overlayText.text = "";
-        }
-        
-        // Clear legacy single bbox
-        if (this.bboxImage) {
-            this.bboxImage.enabled = false;
         }
         
         // Clear all dynamically created bounding boxes
