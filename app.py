@@ -4,6 +4,7 @@ import threading
 import time
 import os
 from datetime import datetime
+from ollama_client import get_ollama_response
 
 app = Flask(__name__)
 
@@ -28,6 +29,7 @@ class Camera:
         
         # Start a thread to continuously capture frames
         self.capture_thread = threading.Thread(target=self._capture_frames)
+        #this is where i would put the ollama request/response async 
         self.capture_thread.daemon = True
         self.capture_thread.start()
         
@@ -76,6 +78,38 @@ def video_feed():
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/analyze_frame', methods=['POST'])
+def analyze_frame():
+    """Analyze the current camera frame with Ollama"""
+    try:
+        # Get the current frame from the camera
+        frame = camera.get_frame()
+        if frame is None:
+            return jsonify({'success': False, 'error': 'No frame available'})
+
+        # Get optional prompt and system prompt from request
+        data = request.get_json() or {}
+        prompt = data.get('prompt', 'What do you see in this image? Describe it briefly.')
+        system_prompt = data.get('system_prompt', 'You are a helpful assistant that describes images concisely.')
+        model = data.get('model', 'llava')
+
+        # Call Ollama to analyze the frame
+        response_text = get_ollama_response(
+            prompt=prompt,
+            image_frame=frame,
+            system_prompt=system_prompt,
+            model=model
+        )
+
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'prompt': prompt
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/save_photo', methods=['POST'])
 def save_photo():
     """Save the current camera frame as a photo"""
@@ -84,25 +118,25 @@ def save_photo():
         frame = camera.get_frame()
         if frame is None:
             return jsonify({'success': False, 'error': 'No frame available'})
-        
+
         # Create photos directory if it doesn't exist
         photos_dir = 'photos'
         if not os.path.exists(photos_dir):
             os.makedirs(photos_dir)
-        
+
         # Generate filename with timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f'webcam_photo_{timestamp}.jpg'
         filepath = os.path.join(photos_dir, filename)
-        
+
         # Save the frame as JPEG
         success = cv2.imwrite(filepath, frame)
-        
+
         if success:
             return jsonify({'success': True, 'filename': filename})
         else:
             return jsonify({'success': False, 'error': 'Failed to save image'})
-            
+
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
