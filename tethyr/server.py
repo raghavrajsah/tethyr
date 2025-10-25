@@ -68,7 +68,7 @@ async def handle_client(
                         message_dict = json.loads(cleaned_message)
                         break
                     except json.JSONDecodeError:
-                        cleaned_message = clean_json_message[cleaned_message[:-1]]
+                        cleaned_message = clean_json_message(cleaned_message[:-1])
                 else:
                     raise json.JSONDecodeError()
 
@@ -104,10 +104,10 @@ async def handle_client(
                             storage,
                         )
 
-            except json.JSONDecodeError:
-                logger.error(f"Invalid JSON received from client {client_id}")
+            except json.JSONDecodeError as e:
+                logger.opt(exception=e).error(f"Invalid JSON received from client {client_id}")
             except Exception as e:
-                logger.error(f"Error handling message from client {client_id}: {e}")
+                logger.opt(exception=e).error(f"Error handling message from client {client_id}")
 
     except ConnectionClosed:
         logger.info(f"Client {client_id} disconnected")
@@ -151,7 +151,7 @@ async def main(enable_storage: bool = False):
     async with serve(
         lambda ws: handle_client(ws, gemini_manager, storage),
         "0.0.0.0",
-        5000,
+        5001,
         max_size=10_000_000,
         ping_interval=20,
         ping_timeout=10,
@@ -160,7 +160,7 @@ async def main(enable_storage: bool = False):
             "============================================================\n"
             "Tethyr AR Server with Gemini Live\n"
             "============================================================\n"
-            "WebSocket Server: ws://0.0.0.0:5000\n"
+            "WebSocket Server: ws://0.0.0.0:5001\n"
             "Waiting for Spectacles to connect...\n"
             f"Storage middleware: {'ENABLED' if enable_storage else 'DISABLED'}\n"
             "============================================================"

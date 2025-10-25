@@ -60,7 +60,7 @@ def parse_client_message(message_dict: dict) -> ClientMessage | None:
                 logger.warning(f"Unknown message type: {message_dict.get('type')}")
                 return None
     except Exception as e:
-        logger.error(f"Error parsing message: {e}")
+        logger.opt(exception=e).error("Error parsing message")
         return None
 
 

@@ -73,7 +73,7 @@ async def handle_handshake(
                 logger.info(f"Detection target changed for client {client_state.client_id}: " f"{response_data['prompt']}")
 
         except Exception as e:
-            logger.error(f"Error handling Gemini response for client {client_state.client_id}: {e}")
+            logger.opt(exception=e).error(f"Error handling Gemini response for client {client_state.client_id}")
 
     # Start listening to Gemini responses in background
     await gemini_session.start_receiving(handle_gemini_response)
@@ -156,7 +156,7 @@ async def handle_video_frame(
             )
 
     except Exception as e:
-        logger.error(f"Error handling video frame from client {client_state.client_id}: {e}")
+        logger.opt(exception=e).error(f"Error handling video frame from client {client_state.client_id}")
 
 
 async def handle_audio_chunk(
@@ -205,12 +205,13 @@ async def handle_audio_chunk(
         # Send audio to Gemini Live API
         gemini_session = await gemini_manager.get_session(client_state.client_id)
         if gemini_session:
-            # Convert float32 to int16 PCM for Gemini
-            audio_int16 = (audio_data * 32767).astype(np.int16)
-            await gemini_session.send_audio_chunk(audio_int16.tobytes(), message.sample_rate)
+            await gemini_session.send_audio_chunk(
+                audio_data,
+                message.sample_rate,
+            )
 
         # Update client state
         client_state.audio_chunk_count += 1
 
     except Exception as e:
-        logger.error(f"Error handling audio chunk from client {client_state.client_id}: {e}")
+        logger.opt(exception=e).error(f"Error handling audio chunk from client {client_state.client_id}")

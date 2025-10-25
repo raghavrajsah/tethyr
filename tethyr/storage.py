@@ -123,7 +123,7 @@ class StorageMiddleware:
             logger.info(f"Saved session data for client {client_state.client_id}")
 
         except Exception as e:
-            logger.error(f"Error saving session for client {client_state.client_id}: {e}")
+            logger.opt(exception=e).error(f"Error saving session for client {client_state.client_id}")
 
     def _save_audio_buffer(self, client_state: ClientState):
         """Save accumulated audio buffer as a WAV file"""

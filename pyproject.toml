@@ -5,7 +5,6 @@ description = "AR Processing Server with Gemini Live integration for smart glass
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "google-generativeai>=0.8.5",
     "websockets>=15.0.1",
     "numpy>=2.2.6",
     "pillow>=12.0.0",

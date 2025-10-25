@@ -80,7 +80,9 @@ export class ARStreamingClient extends BaseScriptComponent {
     videoFrameSkip: number = 15;
 
     @input
-    @hint("Audio read interval in milliseconds (default 100ms = 10 reads per second)")
+    @hint(
+        "Audio read interval in milliseconds (default 100ms = 10 reads per second)"
+    )
     audioReadIntervalMs: number = 100;
 
     onAwake() {
@@ -144,12 +146,19 @@ export class ARStreamingClient extends BaseScriptComponent {
                 // -1 means loop indefinitely
                 this.audioComponent.play(-1);
 
-                print("Pre-recorded audio started playing (looping indefinitely)");
-                print(`Audio component is playing: ${this.audioComponent.isPlaying()}`);
+                print(
+                    "Pre-recorded audio started playing (looping indefinitely)"
+                );
+                print(
+                    `Audio component is playing: ${this.audioComponent.isPlaying()}`
+                );
 
                 // Calculate expected samples per read interval
-                const samplesPerInterval = (this.audioSampleRate * this.audioReadIntervalMs) / 1000;
-                print(`Expected samples per ${this.audioReadIntervalMs}ms: ~${samplesPerInterval}`);
+                const samplesPerInterval =
+                    (this.audioSampleRate * this.audioReadIntervalMs) / 1000;
+                print(
+                    `Expected samples per ${this.audioReadIntervalMs}ms: ~${samplesPerInterval}`
+                );
             } else {
                 print(
                     "Error: Prerecorded audio asset is not a file audio provider"
@@ -345,7 +354,9 @@ export class ARStreamingClient extends BaseScriptComponent {
                     : "microphone";
                 const durationMs = (samples / this.audioSampleRate) * 1000;
                 print(
-                    `Sending audio (${source}): samples=${samples}, channels=${channels}, duration=${durationMs.toFixed(1)}ms`
+                    `Sending audio (${source}): samples=${samples}, channels=${channels}, duration=${durationMs.toFixed(
+                        1
+                    )}ms`
                 );
             }
 

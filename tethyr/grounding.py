@@ -62,7 +62,7 @@ class GroundingDetector:
         self.prompt_text = prompt
         with self.model_lock:
             classes = [cls.strip() for cls in prompt.split(",")]
-            logger.info(f"Gemini changed YOLO prompt to detect: {classes}")
+            logger.info(f"Changed YOLO prompt to detect: {classes}")
             text_embeddings = self.model.get_text_pe(classes)
             self.model.set_classes(classes, text_embeddings)
             logger.info(f"Successfully updated detection classes to: {classes}")
