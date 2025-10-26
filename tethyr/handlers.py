@@ -19,11 +19,9 @@ from .types import (
     BBoxMessage,
     BoundingBox,
     ClientState,
-    Color,
     HandshakeAckMessage,
     HandshakeMessage,
     OverlayMessage,
-    Position,
     VideoFrameMessage,
 )
 from .utils import serialize_server_message
@@ -63,8 +61,6 @@ async def handle_handshake(
                     type="overlay",
                     text=response_data["text"],
                     timestamp=datetime.now().isoformat(),
-                    color=Color(r=0.0, g=1.0, b=1.0, a=1.0),
-                    position=Position(x=0.5, y=0.3),
                 )
                 await client_state.websocket.send(serialize_server_message(overlay_msg))
 
@@ -147,7 +143,6 @@ async def handle_video_frame(
                     confidence=detection["confidence"],
                 ),
                 timestamp=datetime.now().isoformat(),
-                color=Color(r=1.0, g=1.0, b=0.0, a=1.0),
             )
             await client_state.websocket.send(serialize_server_message(bbox_msg))
 
