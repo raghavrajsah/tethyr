@@ -27,7 +27,7 @@ what they want to construct/repair
 
 Important:
 - Keep instructions brief and actionable (displayed on AR overlay)
-- Use change_detection_target tool to focus detection on relevant repair objects
+- Use change_detection_target tool to focus detection on relevant repair objects. The object that you are currently focused on is person. Make sure to change the detection target to the object that you are supposed to be working on immediately after you identify the object.
 - Respond to voice commands like "next", "repeat", "help". Feel free to interrupt the user if the user never stopped talking.
 - Be proactive about safety"""
 
@@ -395,6 +395,7 @@ class GeminiLiveSession:
                 self._resume_token = update.new_handle
                 logger.info(f"Updated session resumption handle for {self.client_id}: {update.new_handle}")
 
+        logger.info(f"Response from Gemini for client {self.client_id}: {response}")
         if response.server_content:
             if response.text is not None:
                 if self._callback:
@@ -406,6 +407,7 @@ class GeminiLiveSession:
                         )
                     )
 
+        logger.info(f"Response from Gemini for client {self.client_id}: {response.tool_call}")
         if response.tool_call:
             await self._handle_tool_call(response.tool_call, session)
 
