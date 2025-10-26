@@ -3,6 +3,7 @@ Message handlers for WebSocket communication
 Processes incoming client messages and coordinates responses
 """
 
+import asyncio
 import base64
 import io
 from datetime import datetime
@@ -77,6 +78,11 @@ async def handle_handshake(
 
     # Start listening to Gemini responses in background
     await gemini_session.start_receiving(handle_gemini_response)
+    
+    # Send a simple greeting to initiate the conversation
+    # This will trigger the agent to respond immediately
+    await asyncio.sleep(0.5)  # Brief delay to ensure session is ready
+    await gemini_session.send_text("Hello", turn_complete=True)
 
     # Send handshake acknowledgment
     response = HandshakeAckMessage(
@@ -192,11 +198,11 @@ async def handle_audio_chunk(
             )
 
         # Log audio info periodically
-        if client_state.audio_chunk_count % 10 == 0:
-            duration_ms = (message.samples / message.sample_rate) * 1000
-            logger.debug(
-                f"Audio chunk from client {client_state.client_id}: " f"{message.samples} samples, {duration_ms:.1f}ms"
-            )
+        # if client_state.audio_chunk_count % 10 == 0:
+        #     duration_ms = (message.samples / message.sample_rate) * 1000
+        #     logger.debug(
+        #         f"Audio chunk from client {client_state.client_id}: " f"{message.samples} samples, {duration_ms:.1f}ms"
+        #     )
 
         # Buffer audio if storage is enabled
         if storage and storage.enabled:

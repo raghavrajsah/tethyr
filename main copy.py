@@ -550,13 +550,13 @@ async def handle_video_frame(message: VideoFrameMessage, client_state: ClientSta
         image = Image.open(io.BytesIO(img_bytes))
 
         # Save frame to disk
-        if client_state.output_dir:
-            frame_filename = f"frame_{message.frame_number:06d}.jpg"
-            frame_path = client_state.output_dir / "frames" / frame_filename
-            image.save(frame_path, quality=95)
+        # if client_state.output_dir:
+        #     frame_filename = f"frame_{message.frame_number:06d}.jpg"
+        #     frame_path = client_state.output_dir / "frames" / frame_filename
+        #     image.save(frame_path, quality=95)
 
-            if message.frame_number % 30 == 0:  # Log every 30 frames
-                logger.trace(f"Saved frame {message.frame_number} to {frame_path}")
+        #     if message.frame_number % 30 == 0:  # Log every 30 frames
+        #         logger.trace(f"Saved frame {message.frame_number} to {frame_path}")
 
         # Process frame
         frame_info = {
@@ -611,13 +611,13 @@ async def handle_audio_chunk(message: AudioChunkMessage, client_state: ClientSta
         }
 
         # Log audio info periodically (every 10 chunks)
-        if len(client_state.audio_buffer) % 10 == 0:
-            logger.debug(
-                f"Audio chunk from client {client_state.client_id}: "
-                f"{message.samples} samples, {message.channels} channels, "
-                f"{duration_ms:.1f}ms duration, {message.sample_rate}Hz "
-                f"(total buffered: {len(client_state.audio_buffer)} chunks)"
-            )
+        # if len(client_state.audio_buffer) % 10 == 0:
+        #     logger.debug(
+        #         f"Audio chunk from client {client_state.client_id}: "
+        #         f"{message.samples} samples, {message.channels} channels, "
+        #         f"{duration_ms:.1f}ms duration, {message.sample_rate}Hz "
+        #         f"(total buffered: {len(client_state.audio_buffer)} chunks)"
+        #     )
 
         # Call voice command processing
         instruction = process_audio_chunk(audio_data, audio_info, client_state.client_id)
@@ -676,10 +676,10 @@ async def handle_client(websocket: ServerConnection):
                         logger.trace(f"Handshake from client {client_id}")
                         await handle_handshake(message, client_state)
                     case VideoFrameMessage():
-                        logger.trace(f"Video frame from client {client_id}")
+                        # logger.trace(f"Video frame from client {client_id}")
                         await handle_video_frame(message, client_state)
                     case AudioChunkMessage():
-                        logger.trace(f"Audio chunk from client {client_id}")
+                        # logger.trace(f"Audio chunk from client {client_id}")
                         await handle_audio_chunk(message, client_state)
             except json.JSONDecodeError:
                 logger.error(f"Invalid JSON received from client {client_id} with message {raw_message}")

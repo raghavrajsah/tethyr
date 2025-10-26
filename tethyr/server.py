@@ -88,7 +88,7 @@ async def handle_client(
                             storage,
                         )
                     case VideoFrameMessage():
-                        logger.debug(f"Video frame from client {client_id}")
+                        # logger.debug(f"Video frame from client {client_id}")
                         await handle_video_frame(
                             message,
                             client_state,
@@ -96,7 +96,7 @@ async def handle_client(
                             storage,
                         )
                     case AudioChunkMessage():
-                        logger.debug(f"Audio chunk from client {client_id}")
+                        # logger.debug(f"Audio chunk from client {client_id}")
                         await handle_audio_chunk(
                             message,
                             client_state,
