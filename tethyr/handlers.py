@@ -58,12 +58,15 @@ async def handle_handshake(
         try:
             if response_data["type"] == "text":
                 # Send text as overlay
+                text = response_data["text"]
+                logger.info(f"Sending text to client {client_state.client_id}: {text[:100]}...")
+                
                 overlay_msg = OverlayMessage(
                     type="overlay",
-                    text=response_data["text"],
+                    text=text,
                     timestamp=datetime.now().isoformat(),
-                    color=Color(r=0.0, g=1.0, b=1.0, a=1.0),
-                    position=Position(x=0.5, y=0.3),
+                    color=Color(r=1.0, g=1.0, b=1.0, a=1.0),  # White text for better visibility
+                    position=Position(x=0.5, y=0.2),  # Slightly higher on screen
                 )
                 await client_state.websocket.send(serialize_server_message(overlay_msg))
 

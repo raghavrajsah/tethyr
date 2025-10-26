@@ -466,9 +466,14 @@ export class ARStreamingClient extends BaseScriptComponent {
     }
 
     private handleOverlayInstruction(message: any): void {
-        if (this.overlayText && message.text) {
+        if (!this.overlayText) {
+            print("Warning: overlayText component not assigned in Inspector");
+            return;
+        }
+
+        if (message.text) {
             this.overlayText.text = message.text;
-            print(`Overlay updated: ${message.text}`);
+            print(`[AI Agent] ${message.text}`);
 
             // Optional: apply styling if provided
             if (message.color) {
@@ -479,6 +484,7 @@ export class ARStreamingClient extends BaseScriptComponent {
                     color.b,
                     color.a
                 );
+                print(`Text color set to: rgba(${color.r}, ${color.g}, ${color.b}, ${color.a})`);
             }
 
             // Optional: apply positioning if provided
@@ -492,8 +498,11 @@ export class ARStreamingClient extends BaseScriptComponent {
                     screenTransform.anchors.setCenter(
                         new vec2(message.position.x, message.position.y)
                     );
+                    print(`Text position set to: (${message.position.x}, ${message.position.y})`);
                 }
             }
+        } else {
+            print("Warning: Overlay message received but no text provided");
         }
     }
 
