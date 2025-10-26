@@ -14,6 +14,8 @@ from .email_supervisor import EMAIL_SUPERVISOR_TOOL_DECLARATION, EmailSupervisor
 
 # Assuming grounding.py exists in the same directory
 from .grounding import GROUNDING_TOOL_DECLARATION, GroundingDetector
+from .scratchpad import ScratchpadManager
+from .scratchpad_tools import SCRATCHPAD_TOOL_DECLARATIONS
 from .types import GeminiCallback, Text
 
 DEFAULT_SYSTEM_INST = """You are Bob, a helpful assistant for AR smart glasses that assists users with various tasks.
@@ -54,11 +56,13 @@ class GeminiLiveSession:
         self,
         client_id: str,
         grounding_detector: GroundingDetector,
+        scratchpad_manager: ScratchpadManager,
         email_supervisor: EmailSupervisor | None = None,
         system_instruction: str | None = None,
     ):
         self.client_id = client_id
         self.grounding_detector = grounding_detector
+        self.scratchpad_manager = scratchpad_manager
         self.email_supervisor = email_supervisor or EmailSupervisor()
         self.model = "gemini-live-2.5-flash-preview"
         self._system_instruction = system_instruction
@@ -394,6 +398,17 @@ class GeminiLiveSession:
                         )
                     )
 
+                elif fc.name in ["read_scratchpad", "write_scratchpad", "append_scratchpad", "clear_scratchpad"]:
+                    result = await self._handle_scratchpad_tool(fc.name, fc.args)
+
+                    await session.send_tool_response(
+                        function_responses=types.FunctionResponse(
+                            id=fc.id,
+                            name=fc.name,
+                            response=result,
+                        )
+                    )
+
                 else:
                     logger.error(
                         f"Unknown function call from Gemini for client {self.client_id}: {fc.name}"
@@ -487,6 +502,69 @@ class GeminiLiveSession:
                 "message": f"Failed to request help: {str(e)}",
             }
 
+    async def _handle_scratchpad_tool(
+        self, tool_name: str, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handles scratchpad tool calls (read, write, append, clear)."""
+        try:
+            scratchpad = self.scratchpad_manager.get_scratchpad(self.client_id)
+
+            if tool_name == "read_scratchpad":
+                content = scratchpad.read()
+                logger.info(
+                    f"Gemini read scratchpad for client {self.client_id}: {len(content)} chars"
+                )
+                return {
+                    "status": "success",
+                    "content": content,
+                    "is_empty": scratchpad.is_empty(),
+                }
+
+            elif tool_name == "write_scratchpad":
+                content = args.get("content", "")
+                scratchpad.write(content)
+                logger.info(
+                    f"Gemini wrote to scratchpad for client {self.client_id}: {len(content)} chars"
+                )
+                return {
+                    "status": "success",
+                    "message": f"Wrote {len(content)} characters to scratchpad",
+                }
+
+            elif tool_name == "append_scratchpad":
+                content = args.get("content", "")
+                scratchpad.append(content)
+                logger.info(
+                    f"Gemini appended to scratchpad for client {self.client_id}: {len(content)} chars"
+                )
+                return {
+                    "status": "success",
+                    "message": f"Appended {len(content)} characters to scratchpad",
+                }
+
+            elif tool_name == "clear_scratchpad":
+                scratchpad.clear()
+                logger.info(f"Gemini cleared scratchpad for client {self.client_id}")
+                return {
+                    "status": "success",
+                    "message": "Scratchpad cleared",
+                }
+
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Unknown scratchpad tool: {tool_name}",
+                }
+
+        except Exception as e:
+            logger.opt(exception=e).error(
+                f"Error handling scratchpad tool {tool_name} for client {self.client_id}"
+            )
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+
     @property
     def _connect_config(self) -> types.LiveConnectConfig:
         system_instruction = self._system_instruction or DEFAULT_SYSTEM_INST
@@ -495,6 +573,7 @@ class GeminiLiveSession:
             types.Tool(
                 function_declarations=[
                     GROUNDING_TOOL_DECLARATION,
+                    *SCRATCHPAD_TOOL_DECLARATIONS,
                     EMAIL_SUPERVISOR_TOOL_DECLARATION,
                 ],
             ),
@@ -646,9 +725,10 @@ class GeminiSessionManager:
         self.sessions: dict[str, GeminiLiveSession] = {}
         self.grounding_detector = grounding_detector or GroundingDetector()
         self.email_supervisor = email_supervisor or EmailSupervisor()
+        self.scratchpad_manager = ScratchpadManager()
         self._lock = asyncio.Lock()
         logger.info(
-            "Initialized GeminiSessionManager with shared grounding detector and email supervisor"
+            "Initialized GeminiSessionManager with shared grounding detector, email supervisor, and scratchpad manager"
         )
 
     async def create_session(
@@ -669,6 +749,7 @@ class GeminiSessionManager:
             session = GeminiLiveSession(
                 client_id=client_id,
                 grounding_detector=self.grounding_detector,
+                scratchpad_manager=self.scratchpad_manager,
                 email_supervisor=self.email_supervisor,
                 system_instruction=system_instruction,
             )
