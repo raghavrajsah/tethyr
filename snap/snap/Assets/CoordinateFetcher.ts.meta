@@ -60,7 +60,7 @@
     - '// @input Asset.AudioTrackAsset microphoneAudio {"hint":"Audio From Microphone asset (leave empty if using prerecorded audio)"}'
     - '// @input Asset.AudioTrackAsset prerecordedAudio {"hint":"Pre-recorded Audio Track asset for testing (leave empty if using microphone)"}'
     - '// @input Component.AudioComponent audioComponent {"hint":"Audio Component for playing pre-recorded audio (required if using prerecorded audio)"}'
-    - '// @input string serverUrl = "ws://192.168.1.100:5000" {"hint":"WebSocket server URL, e.g., ws://192.168.1.100:5000"}'
+    - '// @input string serverUrl = "ws://172.20.0.231:5001" {"hint":"WebSocket server URL, e.g., ws://192.168.1.100:5001"}'
     - '// @input Component.Text overlayText {"hint":"Text overlay for displaying instructions"}'
     - '// @input Asset.ObjectPrefab boundBoxPrefab {"hint":"BoundBox prefab for bounding box visualization"}'
     - '// @input SceneObject bboxParent {"hint":"Parent scene object for instantiated bounding boxes"}'
