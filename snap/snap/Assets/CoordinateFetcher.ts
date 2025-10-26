@@ -62,13 +62,13 @@ export class ARStreamingClient extends BaseScriptComponent {
 
     @input
     @hint("Send every Nth video frame")
-    videoFrameSkip: number = 15;
+    videoFrameSkip: number = 60;
 
     @input
     @hint(
         "Audio read interval in milliseconds (default 100ms = 10 reads per second)"
     )
-    audioReadIntervalMs: number = 100;
+    audioReadIntervalMs: number = 250;
 
     onAwake() {
         this.createEvent("OnStartEvent").bind(() => {

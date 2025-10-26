@@ -58,5 +58,5 @@
     - '// @input Component.Text overlayText {"hint":"Text overlay for displaying instructions"}'
     - '// @input Asset.ObjectPrefab boundBoxPrefab {"hint":"BoundBox prefab for bounding box visualization"}'
     - '// @input SceneObject bboxParent {"hint":"Parent scene object for instantiated bounding boxes"}'
-    - '// @input float videoFrameSkip = 15 {"hint":"Send every Nth video frame"}'
+    - '// @input float videoFrameSkip = 60 {"hint":"Send every Nth video frame"}'
     - '// @input float audioReadIntervalMs = 100 {"hint":"Audio read interval in milliseconds (default 100ms = 10 reads per second)"}'

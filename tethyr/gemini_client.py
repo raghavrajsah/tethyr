@@ -25,7 +25,7 @@ what they want to construct/repair
 
 Important:
 - Keep instructions brief and actionable (displayed on AR overlay)
-- Use change_detection_target tool to focus detection on relevant repair objects
+- Use change_detection_target tool to focus detection on relevant repair objects. The object that you are currently focused on is person. Make sure to change the detection target to the object that you are supposed to be working on immediately after you identify the object.
 - Respond to voice commands like "next", "repeat", "help". Feel free to interrupt the user if the user never stopped talking.
 - Be proactive about safety"""
 
@@ -330,21 +330,22 @@ class GeminiLiveSession:
     async def _receive_loop(self, session: AsyncSession):
         """Receives responses from the active session."""
         try:
-            async for response in session.receive():
-                if not self._is_running:
-                    logger.debug(f"Stopping receive loop for client {self.client_id}")
-                    break
+            while True:
+                async for response in session.receive():
+                    if not self._is_running:
+                        logger.debug(f"Stopping receive loop for client {self.client_id}")
+                        break
 
-                logger.info(
-                    f"Received response from Gemini for client {self.client_id}: {response}"
-                )
-
-                try:
-                    await self._handle_response(response, session)
-                except Exception as e:
-                    logger.opt(exception=e).error(
-                        f"Error handling response for client {self.client_id}"
+                    logger.info(
+                        f"Received response from Gemini for client {self.client_id}: {response}"
                     )
+
+                    try:
+                        await self._handle_response(response, session)
+                    except Exception as e:
+                        logger.opt(exception=e).error(
+                            f"Error handling response for client {self.client_id}"
+                        )
 
         except asyncio.CancelledError:
             logger.info(f"Receive loop cancelled for client {self.client_id}")
@@ -352,16 +353,19 @@ class GeminiLiveSession:
         except Exception as e:
             logger.opt(exception=e).error(
                 f"Fatal error in receive loop for client {self.client_id}"
-            )
-            self._stop_event.set()  # Trigger a session stop
+            )# Trigger a session stop
+            self._stop_event.set()
 
     async def _handle_response(self, response, session: AsyncSession):
         """Handles text and tool calls from a session response."""
+
+        logger.info(f"Response from Gemini for client {self.client_id}: {response}")
         if response.server_content:
             if response.text is not None:
                 if self._callback:
                     await self._callback({"type": "text", "text": response.text})
 
+        logger.info(f"Response from Gemini for client {self.client_id}: {response.tool_call}")
         if response.tool_call:
             await self._handle_tool_call(response.tool_call, session)
 
