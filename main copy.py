@@ -18,6 +18,8 @@ import load_env  # noqa: E402, F401
 from agent_context import context_manager
 from ai_client import stream_to_gemini_live_sync
 
+from grounding import Grounding
+
 logger.add(
     "logs/server.log",
     rotation="100 MB",
@@ -193,6 +195,9 @@ class ClientState:
 
 clients: dict[str, ClientState] = {}
 
+# Global grounding model instance
+grounding_model: Grounding | None = None
+
 
 def setup_output_directory(client_id: str) -> Path:
     """
@@ -310,93 +315,76 @@ def identify_object_from_frame(image_base64: str) -> str | None:
         return None
 
 
-def process_video_frame(image: Image.Image, frame_info: dict, client_id: str) -> ServerMessage | None:
+def process_video_frame(image: Image.Image, frame_info: dict) -> list[ServerMessage]:
     """
-    Process video frame with AI repair assistant logic
+    Process video frame using YOLO grounding model and return bounding box instructions
 
     Args:
         image: PIL Image object
         frame_info: Dictionary with frame metadata (frame_number, resolution, timestamp)
-        client_id: Client session identifier
 
     Returns:
-        ServerMessage or None
+        List of ServerMessage instructions (one per detected object)
     """
+    if grounding_model is None:
+        logger.warning("Grounding model not initialized")
+        return []
+
     try:
-        # Get context for this session
-        context = context_manager.get_context(client_id)
+        # Convert PIL Image to numpy array (RGB format for YOLO)
+        img_array = np.array(image.convert("RGB"))
 
-        # Convert image to base64 for AI analysis
-        buffered = io.BytesIO()
-        image.save(buffered, format="JPEG", quality=85)
-        image_base64 = base64.b64encode(buffered.getvalue()).decode()
+        # Run YOLO detection
+        results = grounding_model.detect(img_array)
 
-        # Check if this is the first frame (no repair started yet)
-        if not context.is_repair_started():
-            # Only try to detect object every 30 frames to avoid too many AI calls
-            if frame_info.get("frame_number", 0) % 30 == 0:
-                # Use AI to identify what object needs repair
-                detected_object = identify_object_from_frame(image_base64)
-
-                if detected_object and detected_object in REPAIR_PLANS:
-                    # Start a new repair session
-                    repair_steps = REPAIR_PLANS[detected_object]
-                    context_manager.start_repair(
-                        session_id=client_id,
-                        object_type=detected_object,
-                        repair_steps=repair_steps,
+        # Extract bounding boxes from results
+        messages = []
+        if results and len(results) > 0:
+            result = results[0]  # Get first result (single image)
+            
+            # Check if there are any detections
+            if result.boxes is not None and len(result.boxes) > 0:
+                boxes = result.boxes.xyxy.cpu().numpy()  # Get bounding boxes in xyxy format
+                confidences = result.boxes.conf.cpu().numpy()  # Get confidence scores
+                class_ids = result.boxes.cls.cpu().numpy()  # Get class IDs
+                
+                # Get class names
+                class_names = result.names  # Dictionary mapping class_id to class_name
+                
+                for box, conf, cls_id in zip(boxes, confidences, class_ids):
+                    x_min, y_min, x_max, y_max = map(int, box)
+                    print(f"Bounding box: {x_min}, {y_min}, {x_max}, {y_max}")
+                    
+                    # Get class name
+                    class_name = class_names[int(cls_id)] if class_names else f"Object {int(cls_id)}"
+                    print(f"Class name: {class_name}")
+                    
+                    # Generate color based on class_id for visual distinction
+                    # Using a simple hash-based color generation
+                    np.random.seed(int(cls_id))
+                    r, g, b = np.random.rand(3)
+                    
+                    messages.append(
+                        BBoxMessage(
+                            type="bbox",
+                            bbox=BoundingBox(
+                                x=x_min,
+                                y=y_min,
+                                width=x_max - x_min,
+                                height=y_max - y_min,
+                                label=class_name,
+                                confidence=float(conf),
+                            ),
+                            color=Color(r=float(r), g=float(g), b=float(b), a=0.8),
+                            timestamp=datetime.now().isoformat(),
+                        )
                     )
-
-                    # Show safety warning
-                    safety_warning = SAFETY_WARNINGS.get(detected_object, "")
-                    if safety_warning:
-                        context_manager.add_safety_warning(client_id, safety_warning)
-
-                    logger.info(f"Detected {detected_object} for client {client_id}")
-
-                    return OverlayMessage(
-                        type="overlay",
-                        text=f"Detected: {detected_object.title()}\n{safety_warning}",
-                        color=Color(r=1.0, g=1.0, b=0.0, a=1.0),
-                        position=Position(x=0.5, y=0.2),
-                        timestamp=datetime.now().isoformat(),
-                    )
-                else:
-                    # Object not recognized - show prompt
-                    return OverlayMessage(
-                        type="overlay",
-                        text="Point camera at repair object",
-                        color=Color(r=1.0, g=1.0, b=1.0, a=0.7),
-                        position=Position(x=0.5, y=0.5),
-                        timestamp=datetime.now().isoformat(),
-                    )
-
-        # Repair is in progress - show current step
-        else:
-            current_instruction = context.get_current_step_instruction()
-
-            # Check if repair is complete
-            if context.is_repair_complete():
-                return OverlayMessage(
-                    type="overlay",
-                    text=f"{context.object_type.title()} repair complete! ✓",
-                    color=Color(r=0.0, g=1.0, b=0.0, a=1.0),
-                    position=Position(x=0.5, y=0.5),
-                    timestamp=datetime.now().isoformat(),
-                )
-
-            # Show current step instruction
-            return OverlayMessage(
-                type="overlay",
-                text=f"Step {context.current_step}/{context.total_steps}:\n{current_instruction}",
-                color=Color(r=0.0, g=1.0, b=1.0, a=1.0),
-                position=Position(x=0.5, y=0.3),
-                timestamp=datetime.now().isoformat(),
-            )
+        
+        return messages
 
     except Exception as e:
-        logger.error(f"Error in process_video_frame: {e}")
-        return None
+        logger.error(f"Error in YOLO detection: {e}")
+        return []
 
 
 def process_audio_chunk(
@@ -577,10 +565,11 @@ async def handle_video_frame(message: VideoFrameMessage, client_state: ClientSta
             "timestamp": message.timestamp,
         }
 
-        # Call AI repair assistant processing
-        instruction = process_video_frame(image, frame_info, client_state.client_id)
+        # Call YOLO-based video processing function
+        instructions = process_video_frame(image, frame_info)
 
-        if instruction:
+        # Send all bounding box instructions to the client
+        for instruction in instructions:
             await client_state.websocket.send(serialize_server_message(instruction))
 
         # Update client state
@@ -622,13 +611,13 @@ async def handle_audio_chunk(message: AudioChunkMessage, client_state: ClientSta
         }
 
         # Log audio info periodically (every 10 chunks)
-        if len(client_state.audio_buffer) % 10 == 0:
-            logger.debug(
-                f"Audio chunk from client {client_state.client_id}: "
-                f"{message.samples} samples, {message.channels} channels, "
-                f"{duration_ms:.1f}ms duration, {message.sample_rate}Hz "
-                f"(total buffered: {len(client_state.audio_buffer)} chunks)"
-            )
+        # if len(client_state.audio_buffer) % 10 == 0:
+        #     logger.debug(
+        #         f"Audio chunk from client {client_state.client_id}: "
+        #         f"{message.samples} samples, {message.channels} channels, "
+        #         f"{duration_ms:.1f}ms duration, {message.sample_rate}Hz "
+        #         f"(total buffered: {len(client_state.audio_buffer)} chunks)"
+        #     )
 
         # Call voice command processing
         instruction = process_audio_chunk(audio_data, audio_info, client_state.client_id)
@@ -724,17 +713,31 @@ async def forever():
 
 
 async def main():
+    global grounding_model
+    
     print("=" * 60)
     print("AR Processing Server")
     print("=" * 60)
-    print("WebSocket Server: ws://0.0.0.0:5000")
+    
+    # Initialize the grounding model
+    model_path = "yoloe-11s-seg.pt"
+    initial_prompt = "person, cup, bottle, phone, laptop, book"  # Common objects to detect
+    
+    try:
+        grounding_model = Grounding(model_path=model_path, initial_prompt=initial_prompt)
+        print(f"Grounding model initialized with prompt: {initial_prompt}")
+    except Exception as e:
+        print(f"Warning: Failed to initialize grounding model: {e}")
+        print("Server will run without object detection")
+    
+    print("WebSocket Server: ws://0.0.0.0:5001")
     print("Waiting for Spectacles to connect...")
     print("=" * 60)
 
     async with serve(
         handle_client,
         "0.0.0.0",
-        5000,
+        5001,
         max_size=10_000_000,
         ping_interval=20,
         ping_timeout=10,
