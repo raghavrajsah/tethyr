@@ -50,7 +50,11 @@ async def handle_handshake(
         client_state.output_dir = storage.setup_client_storage(client_state)
 
     # Create Gemini Live session for this client
-    gemini_session = await gemini_manager.create_session(client_state.client_id)
+    gemini_session = await gemini_manager.create_session(
+        # FIXME: This is BS
+        client_state.client_id,
+        lambda response_data: handle_gemini_response(response_data),
+    )
 
     # Start receiving responses from Gemini in background
     async def handle_gemini_response(response_data: dict):
@@ -70,13 +74,15 @@ async def handle_handshake(
             elif response_data["type"] == "prompt_changed":
                 # Gemini changed what YOLO should detect
                 # Detection continues automatically with new prompt
-                logger.info(f"Detection target changed for client {client_state.client_id}: " f"{response_data['prompt']}")
+                logger.info(
+                    f"Detection target changed for client {client_state.client_id}: "
+                    f"{response_data['prompt']}"
+                )
 
         except Exception as e:
-            logger.opt(exception=e).error(f"Error handling Gemini response for client {client_state.client_id}")
-
-    # Start listening to Gemini responses in background
-    await gemini_session.start_receiving(handle_gemini_response)
+            logger.opt(exception=e).error(
+                f"Error handling Gemini response for client {client_state.client_id}"
+            )
 
     # Send handshake acknowledgment
     response = HandshakeAckMessage(
@@ -156,7 +162,9 @@ async def handle_video_frame(
             )
 
     except Exception as e:
-        logger.opt(exception=e).error(f"Error handling video frame from client {client_state.client_id}")
+        logger.opt(exception=e).error(
+            f"Error handling video frame from client {client_state.client_id}"
+        )
 
 
 async def handle_audio_chunk(
@@ -195,7 +203,8 @@ async def handle_audio_chunk(
         if client_state.audio_chunk_count % 10 == 0:
             duration_ms = (message.samples / message.sample_rate) * 1000
             logger.debug(
-                f"Audio chunk from client {client_state.client_id}: " f"{message.samples} samples, {duration_ms:.1f}ms"
+                f"Audio chunk from client {client_state.client_id}: "
+                f"{message.samples} samples, {duration_ms:.1f}ms"
             )
 
         # Buffer audio if storage is enabled
@@ -214,4 +223,6 @@ async def handle_audio_chunk(
         client_state.audio_chunk_count += 1
 
     except Exception as e:
-        logger.opt(exception=e).error(f"Error handling audio chunk from client {client_state.client_id}")
+        logger.opt(exception=e).error(
+            f"Error handling audio chunk from client {client_state.client_id}"
+        )

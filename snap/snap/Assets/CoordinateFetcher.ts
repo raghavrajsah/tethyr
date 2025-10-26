@@ -31,11 +31,11 @@ export class ARStreamingClient extends BaseScriptComponent {
     )
     microphoneAudio: AudioTrackAsset | undefined;
 
-    @input
-    @hint(
-        "Pre-recorded Audio Track asset for testing (leave empty if using microphone)"
-    )
-    prerecordedAudio: AudioTrackAsset | undefined;
+    // @input
+    // @hint(
+    //     "Pre-recorded Audio Track asset for testing (leave empty if using microphone)"
+    // )
+    // prerecordedAudio: AudioTrackAsset | undefined;
 
     @input
     @hint(
@@ -126,59 +126,59 @@ export class ARStreamingClient extends BaseScriptComponent {
 
     private initializeAudio(): void {
         // Check if using pre-recorded audio for testing
-        if (this.prerecordedAudio && this.audioComponent) {
-            this.usePrerecordedAudio = true;
-            const control = this.prerecordedAudio.control;
+        // if (this.prerecordedAudio && this.audioComponent) {
+        //     this.usePrerecordedAudio = true;
+        //     const control = this.prerecordedAudio.control;
 
-            if (control.isOfType("Provider.FileAudioTrackProvider")) {
-                this.fileAudioProvider = control as FileAudioTrackProvider;
-                this.fileAudioProvider.sampleRate = this.audioSampleRate;
+        //     if (control.isOfType("Provider.FileAudioTrackProvider")) {
+        //         this.fileAudioProvider = control as FileAudioTrackProvider;
+        //         this.fileAudioProvider.sampleRate = this.audioSampleRate;
 
-                print(
-                    `Pre-recorded audio initialized at ${this.audioSampleRate}Hz`
-                );
-                print(`Max frame size: ${this.fileAudioProvider.maxFrameSize}`);
+        //         print(
+        //             `Pre-recorded audio initialized at ${this.audioSampleRate}Hz`
+        //         );
+        //         print(`Max frame size: ${this.fileAudioProvider.maxFrameSize}`);
 
-                this.audioReadBuffer = new Float32Array(
-                    this.fileAudioProvider.maxFrameSize
-                );
+        //         this.audioReadBuffer = new Float32Array(
+        //             this.fileAudioProvider.maxFrameSize
+        //         );
 
-                // Set the audio track on the component
-                this.audioComponent.audioTrack = this.prerecordedAudio;
+        //         // Set the audio track on the component
+        //         this.audioComponent.audioTrack = this.;
 
-                // Start playing the audio on loop for continuous testing
-                // -1 means loop indefinitely
-                this.audioComponent.play(-1);
+        //         // Start playing the audio on loop for continuous testing
+        //         // -1 means loop indefinitely
+        //         this.audioComponent.play(-1);
 
-                print(
-                    "Pre-recorded audio started playing (looping indefinitely)"
-                );
-                print(
-                    `Audio component is playing: ${this.audioComponent.isPlaying()}`
-                );
+        //         print(
+        //             "Pre-recorded audio started playing (looping indefinitely)"
+        //         );
+        //         print(
+        //             `Audio component is playing: ${this.audioComponent.isPlaying()}`
+        //         );
 
-                // Calculate expected samples per read interval
-                const samplesPerInterval =
-                    (this.audioSampleRate * this.audioReadIntervalMs) / 1000;
-                print(
-                    `Expected samples per ${this.audioReadIntervalMs}ms: ~${samplesPerInterval}`
-                );
-            } else {
-                print(
-                    "Error: Prerecorded audio asset is not a file audio provider"
-                );
-                this.usePrerecordedAudio = false;
-            }
-            return;
-        }
+        //         // Calculate expected samples per read interval
+        //         const samplesPerInterval =
+        //             (this.audioSampleRate * this.audioReadIntervalMs) / 1000;
+        //         print(
+        //             `Expected samples per ${this.audioReadIntervalMs}ms: ~${samplesPerInterval}`
+        //         );
+        //     } else {
+        //         print(
+        //             "Error: Prerecorded audio asset is not a file audio provider"
+        //         );
+        //         this.usePrerecordedAudio = false;
+        //     }
+        //     return;
+        // }
 
         // Otherwise, use microphone
-        if (!this.microphoneAudio) {
-            print(
-                "Warning: No audio source assigned (neither microphone nor prerecorded)"
-            );
-            return;
-        }
+        // if (!this.microphoneAudio) {
+        //     print(
+        //         "Warning: No audio source assigned (neither microphone nor prerecorded)"
+        //     );
+        //     return;
+        // }
 
         const control = this.microphoneAudio.control;
 
