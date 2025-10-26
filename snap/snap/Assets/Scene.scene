@@ -575,7 +575,7 @@
   TouchHandler: !<reference> 00000000-0000-0000-0000-000000000000
   SizeToFit: false
   FontSize: 24
-  Font: !<reference> 00000000-0000-0000-0000-000000000000
+  Font: !<reference> bfedfd45-ddba-49b6-9259-13f5afe8551f
   LayoutRect:
     left: -7.500000
     bottom: -2.250000
@@ -585,7 +585,7 @@
   OverflowHorizontal: Wrap
   Fill: !<TextFill>
     Mode: Solid
-    Color: {x: 0.000000, y: 0.976806, z: 0.000000, w: 1.000000}
+    Color: {x: 0.892989, y: 0.944228, z: 0.231586, w: 1.000000}
     Texture: !<reference> 00000000-0000-0000-0000-000000000000
     ColorTint: {x: 1.000000, y: 1.000000, z: 1.000000, w: 1.000000}
     TileCount: 5.000000
@@ -604,7 +604,7 @@
       TextureStretch: FitWidth
     Size: 0.250000
   Dropshadow: !<DropshadowSettings>
-    Enabled: false
+    Enabled: true
     Fill: !<TextFill>
       Mode: Solid
       Color: {x: 0.000000, y: 0.000000, z: 0.000000, w: 1.000000}
@@ -1811,9 +1811,9 @@
   RawMode: true
   ForceBasic: true
   Anchor:
-    left: -1.000000
-    bottom: 1.000000
-    right: 0.330000
+    left: -0.800000
+    bottom: 0.400000
+    right: 0.800000
     top: 1.000000
   Offset:
     left: 0.000000

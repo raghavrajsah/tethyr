@@ -43,7 +43,7 @@
     []
   DefaultScriptInputs:
     - microphoneAudio: !<reference.AudioTrackAsset> 00000000-0000-0000-0000-000000000000
-      serverUrl: "http://localhost:5000"
+      serverUrl: "http://localhost:5001"
       overlayText: !<reference.Text> 00000000-0000-0000-0000-000000000000
       boundBoxPrefab: !<reference.ObjectPrefab> 00000000-0000-0000-0000-000000000000
       bboxParent: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
@@ -54,7 +54,7 @@
       {}
   InputLines:
     - '// @input Asset.AudioTrackAsset microphoneAudio {"hint":"Audio From Microphone asset"}'
-    - '// @input string serverUrl = "ws://172.20.0.231:5001" {"hint":"WebSocket server URL, e.g., ws://192.168.1.100:5001"}'
+    - '// @input string serverUrl = "ws://172.20.4.40:5001" {"hint":"WebSocket server URL, e.g., ws://192.168.1.100:5001"}'
     - '// @input Component.Text overlayText {"hint":"Text overlay for displaying instructions"}'
     - '// @input Asset.ObjectPrefab boundBoxPrefab {"hint":"BoundBox prefab for bounding box visualization"}'
     - '// @input SceneObject bboxParent {"hint":"Parent scene object for instantiated bounding boxes"}'

@@ -33,7 +33,14 @@ Important:
 - Keep instructions brief and actionable (displayed on AR overlay)
 - Use change_detection_target tool to focus detection on relevant repair objects
 - Respond to voice commands like "next", "repeat", "help". Feel free to interrupt the user if the user never stopped talking.
-- Be proactive about safety"""
+- Be proactive about safety
+
+TOOLS:
+- Use write_scratchpad to keep track of your plan and current progress
+- Use read_scratchpad before responding to check where you are in the plan
+- Use change_detection_target tool to change what objects YOLO should detect
+"""
+# - Be mindful of user readability given that you only have about 4 sentences of display space on the AR overlay (which you can overwrite of course).
 
 
 class GeminiLiveSession:
