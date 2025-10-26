@@ -26,7 +26,7 @@ class GroundingDetector:
 
     def __init__(
         self,
-        model_path: str = "yoloe-11s-seg.pt",
+        model_path: str = "yoloe-11m-seg.pt",
         initial_prompt: str = "person, object",
     ):
         """Initialize the YOLO model with a default prompt

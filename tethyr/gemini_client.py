@@ -65,7 +65,7 @@ class GeminiLiveSession:
         self._started_event = asyncio.Event()
         self._start_exception: Exception | None = None
         self._is_running = False
-        self._reconnect_needed = False
+
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 5
 
@@ -76,189 +76,45 @@ class GeminiLiveSession:
         self.client = genai.Client(api_key=api_key)
         logger.debug(f"Initialized GeminiLiveSession for client {client_id}")
 
-    async def _run(self, resume_token: str | None = None):
-        """Internal task to manage the session lifecycle with an async context."""
-        if not self._callback:
-            logger.error(f"Callback not set for {self.client_id}. Stopping run.")
-            self._start_exception = ValueError("Callback not provided")
-            self._started_event.set()
-            return
+    def __str__(self) -> str:
+        return f"GeminiLiveSession(client_id={self.client_id})"
 
-        self._resume_token = resume_token
+    def __repr__(self) -> str:
+        return f"GeminiLiveSession(client_id={self.client_id})"
 
-        while True:
-            try:
-                system_instruction = self._system_instruction or DEFAULT_SYSTEM_INST
-
-                function_declarations = [GROUNDING_TOOL_DECLARATION]
-                if self.slack_bot and self.slack_bot.is_enabled:
-                    function_declarations.append(SLACK_TOOL_DECLARATION)
-
-                tools = [
-                    types.Tool(function_declarations=function_declarations),
-                    types.Tool(google_search=types.GoogleSearch()),
-                ]
-
-                config = types.LiveConnectConfig(
-                    response_modalities=[types.Modality.TEXT],
-                    system_instruction=system_instruction,
-                    tools=tools,
-                    session_resumption=types.SessionResumptionConfig(
-                        handle=self._resume_token
-                    ),
-                )
-
-                async with self.client.aio.live.connect(
-                    model=self.model,
-                    config=config,
-                ) as session:
-                    self._is_running = True
-                    self._reconnect_needed = False
-                    self._started_event.set()
-                    logger.info(
-                        f"Gemini Live session successfully started for client {self.client_id}"
-                    )
-
-                    # Start concurrent send and receive loops within the session context
-                    receive_task = asyncio.create_task(
-                        self._receive_loop(session),
-                        name=f"recv_{self.client_id}",
-                    )
-                    send_task = asyncio.create_task(
-                        self._send_loop(session),
-                        name=f"send_{self.client_id}",
-                    )
-                    stop_wait_task = asyncio.create_task(
-                        self._stop_event.wait(),
-                        name=f"stop_{self.client_id}",
-                    )
-
-                    tasks = [receive_task, send_task, stop_wait_task]
-
-                    # Wait for the first task to complete for any reason
-                    done, pending = await asyncio.wait(
-                        tasks,
-                        return_when=asyncio.ALL_COMPLETED,
-                    )
-
-                    # Check for exceptions in the task(s) that completed
-                    logger.info("Task finished!")
-                    for task in done:
-                        if not task.cancelled():
-                            exc = task.exception()
-                            if exc:
-                                logger.error(
-                                    f"Task {task.get_name()} failed for {self.client_id}.",
-                                    exception=exc,
-                                )
-
-                    if stop_wait_task not in done:
-                        # A worker task failed or finished. Trigger a full stop.
-                        logger.warning(
-                            f"A worker task for {self.client_id} finished unexpectedly. Stopping session."
-                        )
-                        self._stop_event.set()
-
-                    # Cancel all pending tasks to ensure a clean shutdown
-                    for task in pending:
-                        task.cancel()
-
-                    # Await the cancellation of pending tasks
-                    if pending:
-                        await asyncio.gather(*pending, return_exceptions=True)
-
-                    logger.debug(f"Session task cleanup complete for {self.client_id}.")
-
-                # Check if we need to reconnect
-                if self._reconnect_needed and not self._stop_event.is_set():
-                    self._reconnect_attempts += 1
-                    if self._reconnect_attempts <= self._max_reconnect_attempts:
-                        backoff_delay = min(2**self._reconnect_attempts, 30)
-                        logger.warning(
-                            f"Reconnecting session for {self.client_id} "
-                            f"(attempt {self._reconnect_attempts}/{self._max_reconnect_attempts}) "
-                            f"after {backoff_delay}s delay..."
-                        )
-                        await asyncio.sleep(backoff_delay)
-                        continue  # Reconnect
-                    else:
-                        logger.error(
-                            f"Max reconnection attempts ({self._max_reconnect_attempts}) "
-                            f"reached for {self.client_id}. Stopping session."
-                        )
-                        raise RuntimeError(
-                            "Failed to create the session for client {client_id}"
-                        )
-                else:
-                    # Normal exit, no reconnection needed
-                    break
-
-            except Exception as e:
-                self._start_exception = e
-                logger.opt(exception=e).error(
-                    f"Failed to start/run Gemini session for client {self.client_id}"
-                )
-
-                # Try to reconnect on exception if not explicitly stopped
-                if not self._stop_event.is_set():
-                    self._reconnect_attempts += 1
-                    if self._reconnect_attempts <= self._max_reconnect_attempts:
-                        backoff_delay = min(2**self._reconnect_attempts, 30)
-                        logger.warning(
-                            f"Reconnecting after exception for {self.client_id} "
-                            f"(attempt {self._reconnect_attempts}/{self._max_reconnect_attempts}) "
-                            f"after {backoff_delay}s delay..."
-                        )
-                        await asyncio.sleep(backoff_delay)
-                        self._started_event.set()  # Ensure start() doesn't hang
-                        continue  # Try to reconnect
-                break
-            finally:
-                self._is_running = False
-
-        # Final cleanup
-        self._main_task = None
-        self._callback = None
-        self._started_event.set()  # Ensure start() unblocks on failure
-        self._stop_event.set()  # Ensure any other waiters are unblocked
-        logger.info(f"Gemini session fully stopped for {self.client_id}")
 
     async def start(
         self,
         callback: Callable[[dict[str, Any]], Any],
         resume_token: str | None = None,
     ):
-        """Starts the long-running session task."""
-        if self._is_running:
+        if self._is_running or self._main_task:
             raise ValueError(f"Session already running for client {self.client_id}")
 
         self._start_exception = None
         self._started_event.clear()
         self._stop_event.clear()
+        self._reconnect_attempts = 0
         self._callback = callback
-        self._resume_token = resume_token  # Store for potential re-use
+        self._resume_token = resume_token
 
         self._main_task = asyncio.create_task(self._run(resume_token=resume_token))
 
         try:
-            # Wait for the _run method to successfully enter the context
             await asyncio.wait_for(self._started_event.wait(), timeout=10.0)
         except TimeoutError:
+            logger.error(f"Timeout starting session for {self.client_id}")
             await self.stop()  # Clean up the failed task
+            raise RuntimeError(f"Timeout starting Gemini session for {self.client_id}") from self._start_exception
 
         if self._start_exception:
-            raise RuntimeError(
-                f"Failed to start Gemini session for {self.client_id}"
-            ) from self._start_exception
+            raise RuntimeError(f"Failed to start Gemini session for {self.client_id}") from self._start_exception
 
-        if not self._is_running:
-            raise RuntimeError(
-                f"Session for {self.client_id} failed to start and is not running."
-            )
+        if not self._is_running and not self._stop_event.is_set():
+             raise RuntimeError(f"Session for {self.client_id} failed to start and is not running.")
 
     async def stop(self):
-        """Signals the session to stop and cleans up resources."""
-        if not self._stop_event:
+        if self._stop_event.is_set() and not self._main_task:
             logger.debug(f"Session already stopped for client {self.client_id}")
             return
 
@@ -268,15 +124,15 @@ class GeminiLiveSession:
                 await asyncio.wait_for(self._main_task, timeout=5.0)
             logger.info(f"Gemini session stopped for client {self.client_id}")
         except (asyncio.CancelledError, TimeoutError):
-            logger.warning(
-                f"Timeout or cancellation waiting for session cleanup for client {self.client_id}"
-            )
+            logger.warning(f"Timeout or cancellation waiting for session cleanup for client {self.client_id}")
+            if self._main_task:
+                self._main_task.cancel()
         finally:
             self._is_running = False
             self._main_task = None
-            # Clear queue
             while not self._send_queue.empty():
                 self._send_queue.get_nowait()
+                self._send_queue.task_done()
 
     @property
     def is_running(self) -> bool:
@@ -376,7 +232,6 @@ class GeminiLiveSession:
                         )
 
                 except Exception as e:
-                    # Check if it's a ConnectionClosedError indicating TCP disruption
                     is_tcp_disruption = "ConnectionClosed" in type(e).__name__ and (
                         "no close frame received" in str(e)
                         or "no close frame sent" in str(e)
@@ -390,10 +245,8 @@ class GeminiLiveSession:
                             f"Immediately closing session to resume with handle: {self._resume_token}"
                         )
 
-                        # Put the item back in the queue so we don't lose it
                         await self._send_queue.put((item_type, data))
 
-                        # Signal immediate reconnection - no retries needed for TCP disruption
                         self._reconnect_needed = True
                         self._stop_event.set()
                         self._send_queue.task_done()
@@ -438,7 +291,7 @@ class GeminiLiveSession:
                             f"Error handling response for client {self.client_id}"
                         )
         except asyncio.CancelledError:
-            logger.info(f"Receive loop cancelled for client {self.client_id}")
+            logger.info(f"Receive loop cancelled for {self}")
             raise
         except Exception as e:
             # Check if it's a ConnectionClosedError indicating TCP disruption
@@ -600,6 +453,145 @@ class GeminiLiveSession:
                 "message": str(e),
             }
 
+
+    @property
+    def _connect_config(self) -> types.LiveConnectConfig:
+        system_instruction = self._system_instruction or DEFAULT_SYSTEM_INST
+
+        tools = [
+            types.Tool(
+                function_declarations=[GROUNDING_TOOL_DECLARATION],
+            ),
+            types.Tool(google_search=types.GoogleSearch()),
+        ]
+
+        if self.slack_bot and self.slack_bot.is_enabled:
+            tools[0].function_declarations.append(SLACK_TOOL_DECLARATION)
+
+        return types.LiveConnectConfig(
+            response_modalities=[types.Modality.TEXT],
+            system_instruction=system_instruction,
+            tools=tools,
+            session_resumption=types.SessionResumptionConfig(handle=self._resume_token),
+        )
+
+    async def _run_workers(self, session: AsyncSession):
+        self._is_running = True
+        self._reconnect_attempts = 0
+        self._started_event.set()
+        logger.info(f"Gemini Live session successfully started/resumed for client {self.client_id}")
+
+        receive_task = asyncio.create_task(
+            self._receive_loop(session),
+            name=f"recv_{self.client_id}",
+        )
+        send_task = asyncio.create_task(
+            self._send_loop(session),
+            name=f"send_{self.client_id}",
+        )
+        stop_wait_task = asyncio.create_task(
+            self._stop_event.wait(),
+            name=f"stop_{self.client_id}",
+        )
+
+        tasks = [receive_task, send_task, stop_wait_task]
+        done, pending = await asyncio.wait(
+            tasks,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        excs = []
+        for task in done:
+            is_manual_stop = task is stop_wait_task
+            if task.cancelled():
+                continue
+
+            exc = task.exception()
+            if exc:
+                logger.error(
+                    f"Task {task.get_name()} failed for {self}.",
+                    exception=exc,
+                )
+                excs.append(exc)
+            elif not is_manual_stop:
+                logger.warning(f"Task {task.get_name()} for {self} finished unexpectedly.")
+                excs.append(RuntimeError(f"Task {task.get_name()} finished unexpectedly"))
+
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        logger.debug(f"Session task cleanup complete for {self}.")
+
+        if excs:
+            for exc in excs:
+                logger.opt(exception=exc).error("Worker tasks failed for {self}.")
+            raise excs[0]
+
+    async def _handle_connection_error(self, e: Exception) -> bool:
+        self._is_running = False
+
+        if self._stop_event.is_set():
+            logger.warning(f"{self} was manually stopped. Not reconnecting.")
+            return False
+
+        logger.opt(exception=e).error(f"Gemini session error for client {self}")
+
+        if not self._resume_token:
+            logger.error(f"Cannot reconnect session for {self}: No resume token available.")
+            self._start_exception = e
+            return False
+
+        self._reconnect_attempts += 1
+        if self._reconnect_attempts > self._max_reconnect_attempts:
+            logger.error(
+                f"Max reconnection attempts ({self._max_reconnect_attempts}) "
+                f"reached for {self}. Stopping session."
+            )
+            self._start_exception = e
+            return False
+
+        backoff_delay = min(2**self._reconnect_attempts, 30)
+        logger.warning(
+            f"Reconnecting session for {self} with token {self._resume_token[:10]}... "
+            f"(attempt {self._reconnect_attempts}/{self._max_reconnect_attempts}) "
+            f"after {backoff_delay}s delay..."
+        )
+        await asyncio.sleep(backoff_delay)
+        self._started_event.set()
+        return True
+
+    async def _run(self, resume_token: str | None = None):
+        if not self._callback:
+            logger.error(f"Callback not set for {self.client_id}. Stopping run.")
+            self._start_exception = ValueError("Callback not provided")
+            self._started_event.set()
+            return
+
+        self._resume_token = resume_token
+
+        while not self._stop_event.is_set():
+            try:
+                async with self.client.aio.live.connect(
+                    model=self.model,
+                    config=self._connect_config,
+                ) as session:
+                    await self._run_workers(session)
+
+                logger.info(f"Session for {self.client_id} closed normally.")
+                break
+            except Exception as e:
+                should_retry = await self._handle_connection_error(e)
+                if not should_retry:
+                    break
+
+        self._is_running = False
+        self._main_task = None
+        self._callback = None
+        self._started_event.set()
+        self._stop_event.set()
+        logger.info(f"Gemini session fully stopped for {self.client_id}")
 
 class GeminiSessionManager:
     """Manages multiple Gemini Live sessions for different clients"""
