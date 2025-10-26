@@ -651,7 +651,7 @@
   ScriptInputs:
     "":
       microphoneAudio: !<reference.AudioTrackAsset> 61f3ff7e-715b-4a6c-be3c-f60de8cd182c
-      serverUrl: "ws://172.20.1.152:5001"
+      serverUrl: "ws://172.20.7.121:5001"
       overlayText: !<reference.Text> 2de61abd-8179-4d7d-9be5-f980adc21456
       boundBoxPrefab: !<reference.ObjectPrefab> aa5e1187-ca9a-4d03-8d70-df47710089d4
       bboxParent: !<reference.SceneObject> 7c8f3e99-944a-4fae-b839-f2c2f6b417f9

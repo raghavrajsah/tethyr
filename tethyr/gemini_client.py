@@ -77,7 +77,6 @@ class GeminiLiveSession:
     def __repr__(self) -> str:
         return f"GeminiLiveSession(client_id={self.client_id})"
 
-
     async def start(
         self,
         callback: Callable[[dict[str, Any]], Any],
@@ -100,13 +99,19 @@ class GeminiLiveSession:
         except TimeoutError:
             logger.error(f"Timeout starting session for {self.client_id}")
             await self.stop()  # Clean up the failed task
-            raise RuntimeError(f"Timeout starting Gemini session for {self.client_id}") from self._start_exception
+            raise RuntimeError(
+                f"Timeout starting Gemini session for {self.client_id}"
+            ) from self._start_exception
 
         if self._start_exception:
-            raise RuntimeError(f"Failed to start Gemini session for {self.client_id}") from self._start_exception
+            raise RuntimeError(
+                f"Failed to start Gemini session for {self.client_id}"
+            ) from self._start_exception
 
         if not self._is_running and not self._stop_event.is_set():
-             raise RuntimeError(f"Session for {self.client_id} failed to start and is not running.")
+            raise RuntimeError(
+                f"Session for {self.client_id} failed to start and is not running."
+            )
 
     async def stop(self):
         if self._stop_event.is_set() and not self._main_task:
@@ -119,7 +124,9 @@ class GeminiLiveSession:
                 await asyncio.wait_for(self._main_task, timeout=5.0)
             logger.info(f"Gemini session stopped for client {self.client_id}")
         except (asyncio.CancelledError, TimeoutError):
-            logger.warning(f"Timeout or cancellation waiting for session cleanup for client {self.client_id}")
+            logger.warning(
+                f"Timeout or cancellation waiting for session cleanup for client {self.client_id}"
+            )
             if self._main_task:
                 self._main_task.cancel()
         finally:
@@ -445,7 +452,9 @@ class GeminiLiveSession:
             user_request = args.get("user_request", "User needs assistance")
             context = args.get("context")
 
-            logger.info(f"Gemini requested human help for client {self.client_id}: request='{user_request}'")
+            logger.info(
+                f"Gemini requested human help for client {self.client_id}: request='{user_request}'"
+            )
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
@@ -459,12 +468,13 @@ class GeminiLiveSession:
             return result
 
         except Exception as e:
-            logger.opt(exception=e).error(f"Error requesting human help for client {self.client_id}")
+            logger.opt(exception=e).error(
+                f"Error requesting human help for client {self.client_id}"
+            )
             return {
                 "status": "error",
                 "message": f"Failed to request help: {str(e)}",
             }
-
 
     @property
     def _connect_config(self) -> types.LiveConnectConfig:
@@ -472,13 +482,13 @@ class GeminiLiveSession:
 
         tools = [
             types.Tool(
-                function_declarations=[GROUNDING_TOOL_DECLARATION],
+                function_declarations=[
+                    GROUNDING_TOOL_DECLARATION,
+                    EMAIL_SUPERVISOR_TOOL_DECLARATION,
+                ],
             ),
             types.Tool(google_search=types.GoogleSearch()),
         ]
-
-        if self.slack_bot and self.slack_bot.is_enabled:
-            tools[0].function_declarations.append(EMAIL_SUPERVISOR_TOOL_DECLARATION)
 
         return types.LiveConnectConfig(
             response_modalities=[types.Modality.TEXT],
@@ -491,7 +501,9 @@ class GeminiLiveSession:
         self._is_running = True
         self._reconnect_attempts = 0
         self._started_event.set()
-        logger.info(f"Gemini Live session successfully started/resumed for client {self.client_id}")
+        logger.info(
+            f"Gemini Live session successfully started/resumed for client {self.client_id}"
+        )
 
         receive_task = asyncio.create_task(
             self._receive_loop(session),
@@ -526,8 +538,12 @@ class GeminiLiveSession:
                 )
                 excs.append(exc)
             elif not is_manual_stop:
-                logger.warning(f"Task {task.get_name()} for {self} finished unexpectedly.")
-                excs.append(RuntimeError(f"Task {task.get_name()} finished unexpectedly"))
+                logger.warning(
+                    f"Task {task.get_name()} for {self} finished unexpectedly."
+                )
+                excs.append(
+                    RuntimeError(f"Task {task.get_name()} finished unexpectedly")
+                )
 
         for task in pending:
             task.cancel()
@@ -551,7 +567,9 @@ class GeminiLiveSession:
         logger.opt(exception=e).error(f"Gemini session error for client {self}")
 
         if not self._resume_token:
-            logger.error(f"Cannot reconnect session for {self}: No resume token available.")
+            logger.error(
+                f"Cannot reconnect session for {self}: No resume token available."
+            )
             self._start_exception = e
             return False
 
@@ -604,6 +622,7 @@ class GeminiLiveSession:
         self._started_event.set()
         self._stop_event.set()
         logger.info(f"Gemini session fully stopped for {self.client_id}")
+
 
 class GeminiSessionManager:
     """Manages multiple Gemini Live sessions for different clients"""
