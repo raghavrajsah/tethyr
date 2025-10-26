@@ -47,14 +47,6 @@ async def handle_handshake(
     if storage and storage.enabled:
         client_state.output_dir = storage.setup_client_storage(client_state)
 
-    # Create Gemini Live session for this client
-    await gemini_manager.create_session(
-        # FIXME: This is BS
-        client_state.client_id,
-        lambda response_data: handle_gemini_response(response_data),
-    )
-
-    # Start receiving responses from Gemini in background
     async def handle_gemini_response(response_data: dict):
         """Handle responses from Gemini and send to client"""
         try:
@@ -74,6 +66,12 @@ async def handle_handshake(
 
         except Exception as e:
             logger.opt(exception=e).error(f"Error handling Gemini response for client {client_state.client_id}")
+
+    # Create Gemini Live session for this client
+    await gemini_manager.create_session(
+        client_state.client_id,
+        handle_gemini_response,
+    )
 
     # Send handshake acknowledgment
     response = HandshakeAckMessage(
