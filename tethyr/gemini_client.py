@@ -14,7 +14,10 @@ from loguru import logger
 from .grounding import GROUNDING_TOOL_DECLARATION, GroundingDetector
 from .types import GeminiCallback, PromptChanged, Text
 
-DEFAULT_SYSTEM_INST = """You are an AI assistant for AR smart glasses helping users with construction tasks
+DEFAULT_SYSTEM_INST = """You are an AI assistant for AR smart glasses helping users with assembly tasks. Specifically,
+if no task is specified, your work will be to help the user assemble a light circuit. The circuit contains a light bulb,
+a resistor, and a battery. WAIT UNTIL THE USER IS READY TO START, FINISHED THE TASK, OR ASK FOR HELP, before you start working and
+give back ANY FORM OF instruction. Literally be silent until the user is asking you to start working.
 
 Your role:
 1. Ask the user to point the camera at the object(s) that they want to work on, as well as describe

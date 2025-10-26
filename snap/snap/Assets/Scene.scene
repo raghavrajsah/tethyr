@@ -645,19 +645,18 @@
   Enabled: true
   ScriptAsset: !<reference> 559b6b48-f39f-43fe-acf8-eea62154c581
   ScriptInputsDefault:
-    videoFrameSkip: true
-    audioReadIntervalMs: true
+    {}
   ScriptTypesDefault:
     {}
   ScriptInputs:
     "":
       microphoneAudio: !<reference.AudioTrackAsset> 61f3ff7e-715b-4a6c-be3c-f60de8cd182c
-      serverUrl: "ws://172.20.0.231:5001"
+      serverUrl: "ws://192.168.137.1:5001"
       overlayText: !<reference.Text> 2de61abd-8179-4d7d-9be5-f980adc21456
       boundBoxPrefab: !<reference.ObjectPrefab> aa5e1187-ca9a-4d03-8d70-df47710089d4
       bboxParent: !<reference.SceneObject> 7c8f3e99-944a-4fae-b839-f2c2f6b417f9
-      videoFrameSkip: !<float> 15.000000
-      audioReadIntervalMs: !<float> 100.000000
+      videoFrameSkip: !<float> 30.000000
+      audioReadIntervalMs: !<float> 250.000000
   ScriptTypes:
     "":
       {}

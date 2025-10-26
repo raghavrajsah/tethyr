@@ -5,7 +5,7 @@ Processes incoming client messages and coordinates responses
 
 import base64
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 from loguru import logger
@@ -50,21 +50,44 @@ async def handle_handshake(
     if storage and storage.enabled:
         client_state.output_dir = storage.setup_client_storage(client_state)
 
+    text_buffer = []
+
     async def handle_gemini_response(response_data: GeminiCallback):
+        nonlocal text_buffer
+
         try:
             match response_data:
                 case Text(type="text", text=text, timestamp=timestamp):
+                    now = datetime.now()
+                    text_buffer.append({"text": text, "timestamp": now})
+
+                    cutoff_time = now - timedelta(seconds=10)
+                    text_buffer = [
+                        entry
+                        for entry in text_buffer
+                        if entry["timestamp"] > cutoff_time
+                    ]
+
+                    combined_text = " ".join(entry["text"] for entry in text_buffer)
+
                     overlay_msg = OverlayMessage(
                         type="overlay",
-                        text=text,
+                        text=combined_text,
                         timestamp=timestamp,
                     )
-                    await client_state.websocket.send(serialize_server_message(overlay_msg))
+                    await client_state.websocket.send(
+                        serialize_server_message(overlay_msg)
+                    )
                 case PromptChanged(type="prompt_changed", prompt=prompt):
-                    logger.info(f"Detection target changed for client {client_state.client_id}: " f"{prompt}")
+                    logger.info(
+                        f"Detection target changed for client {client_state.client_id}: "
+                        f"{prompt}"
+                    )
 
         except Exception as e:
-            logger.opt(exception=e).error(f"Error handling Gemini response for client {client_state.client_id}")
+            logger.opt(exception=e).error(
+                f"Error handling Gemini response for client {client_state.client_id}"
+            )
 
     # Create Gemini Live session for this client
     await gemini_manager.create_session(
@@ -149,7 +172,9 @@ async def handle_video_frame(
             )
 
     except Exception as e:
-        logger.opt(exception=e).error(f"Error handling video frame from client {client_state.client_id}")
+        logger.opt(exception=e).error(
+            f"Error handling video frame from client {client_state.client_id}"
+        )
 
 
 async def handle_audio_chunk(
@@ -179,7 +204,10 @@ async def handle_audio_chunk(
         if client_state.audio_chunk_count == 0:
             client_state.audio_sample_rate = message.sample_rate
             client_state.audio_channels = message.channels
-            logger.info(f"Audio configuration for client {client_state.client_id}: " f"{message.sample_rate}Hz, {message.channels} channels")
+            logger.info(
+                f"Audio configuration for client {client_state.client_id}: "
+                f"{message.sample_rate}Hz, {message.channels} channels"
+            )
 
         # Buffer audio if storage is enabled
         if storage and storage.enabled:
@@ -197,4 +225,6 @@ async def handle_audio_chunk(
         client_state.audio_chunk_count += 1
 
     except Exception as e:
-        logger.opt(exception=e).error(f"Error handling audio chunk from client {client_state.client_id}")
+        logger.opt(exception=e).error(
+            f"Error handling audio chunk from client {client_state.client_id}"
+        )
