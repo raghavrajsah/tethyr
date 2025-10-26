@@ -16,6 +16,7 @@ dependencies = [
     "clip",
     "google-genai[aiohttp]>=1.46.0",
     "livekit-agents[google]~=1.2",
+    "slack-sdk>=3.33.4",
 ]
 
 
