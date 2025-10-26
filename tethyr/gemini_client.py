@@ -75,11 +75,7 @@ class GeminiLiveSession:
                 "response_modalities": [types.Modality.TEXT],
                 "system_instruction": system_instruction,
                 "tools": [{"function_declarations": [GROUNDING_TOOL_DECLARATION]}],
-                **(
-                    {"session_session_resumption": {"handle": resume_token}}
-                    if resume_token
-                    else {}
-                ),
+                **({"session_session_resumption": {"handle": resume_token}} if resume_token else {}),
             }
 
             async with self.client.aio.live.connect(
@@ -88,9 +84,7 @@ class GeminiLiveSession:
             ) as session:
                 self._is_running = True
                 self._started_event.set()
-                logger.info(
-                    f"Gemini Live session successfully started for client {self.client_id}"
-                )
+                logger.info(f"Gemini Live session successfully started for client {self.client_id}")
 
                 # Start concurrent send and receive loops within the session context
                 receive_task = asyncio.create_task(
@@ -127,9 +121,7 @@ class GeminiLiveSession:
 
                 if stop_wait_task not in done:
                     # A worker task failed or finished. Trigger a full stop.
-                    logger.warning(
-                        f"A worker task for {self.client_id} finished unexpectedly. Stopping session."
-                    )
+                    logger.warning(f"A worker task for {self.client_id} finished unexpectedly. Stopping session.")
                     self._stop_event.set()
 
                 # Cancel all pending tasks to ensure a clean shutdown
@@ -144,9 +136,7 @@ class GeminiLiveSession:
 
         except Exception as e:
             self._start_exception = e
-            logger.opt(exception=e).error(
-                f"Failed to start/run Gemini session for client {self.client_id}"
-            )
+            logger.opt(exception=e).error(f"Failed to start/run Gemini session for client {self.client_id}")
         finally:
             self._is_running = False
             self._main_task = None
@@ -177,19 +167,12 @@ class GeminiLiveSession:
             await asyncio.wait_for(self._started_event.wait(), timeout=10.0)
         except TimeoutError:
             await self.stop()  # Clean up the failed task
-            raise RuntimeError(
-                f"Failed to start Gemini session for {self.client_id} in time"
-            )
 
         if self._start_exception:
-            raise RuntimeError(
-                f"Failed to start Gemini session for {self.client_id}"
-            ) from self._start_exception
+            raise RuntimeError(f"Failed to start Gemini session for {self.client_id}") from self._start_exception
 
         if not self._is_running:
-            raise RuntimeError(
-                f"Session for {self.client_id} failed to start and is not running."
-            )
+            raise RuntimeError(f"Session for {self.client_id} failed to start and is not running.")
 
     async def stop(self):
         """Signals the session to stop and cleans up resources."""
@@ -203,9 +186,7 @@ class GeminiLiveSession:
                 await asyncio.wait_for(self._main_task, timeout=5.0)
             logger.info(f"Gemini session stopped for client {self.client_id}")
         except (asyncio.CancelledError, TimeoutError):
-            logger.warning(
-                f"Timeout or cancellation waiting for session cleanup for client {self.client_id}"
-            )
+            logger.warning(f"Timeout or cancellation waiting for session cleanup for client {self.client_id}")
         finally:
             self._is_running = False
             self._main_task = None
@@ -223,9 +204,7 @@ class GeminiLiveSession:
     async def send_video_frame(self, image_base64: str):
         """Queues a video frame to be sent to the session."""
         if not self._is_running:
-            logger.warning(
-                f"Cannot send video frame - session not running for client {self.client_id}"
-            )
+            logger.warning(f"Cannot send video frame - session not running for client {self.client_id}")
             return
 
         if "," in image_base64:
@@ -241,33 +220,24 @@ class GeminiLiveSession:
     ):
         """Queues an audio chunk to be sent to the session."""
         if not self._is_running:
-            logger.warning(
-                f"Cannot send audio chunk - session not running for client {self.client_id}"
-            )
+            logger.warning(f"Cannot send audio chunk - session not running for client {self.client_id}")
             return
 
         try:
             if audio_data.dtype != np.float32:
-                logger.warning(
-                    f"Audio data is not float32 ({audio_data.dtype}),"
-                    " conversion to PCM16 might be incorrect"
-                )
+                logger.warning(f"Audio data is not float32 ({audio_data.dtype})," " conversion to PCM16 might be incorrect")
 
             audio_int16 = (audio_data * 32767).astype(np.int16)
             audio_bytes = audio_int16.tobytes()
 
             await self._send_queue.put(("audio", (audio_bytes, sample_rate)))
         except Exception as e:
-            logger.opt(exception=e).error(
-                f"Error processing audio chunk for client {self.client_id}"
-            )
+            logger.opt(exception=e).error(f"Error processing audio chunk for client {self.client_id}")
 
     async def send_text(self, text: str, turn_complete: bool = True):
         """Queues a text message to be sent to the session."""
         if not self._is_running:
-            logger.warning(
-                f"Cannot send text - session not running for client {self.client_id}"
-            )
+            logger.warning(f"Cannot send text - session not running for client {self.client_id}")
             return
 
         await self._send_queue.put(("text", (text, turn_complete)))
@@ -275,9 +245,9 @@ class GeminiLiveSession:
     async def _send_loop(self, session: AsyncSession):
         """Consumes the send queue and sends data to the active session."""
         try:
-            logger.warning("Send worker is up!")
+            logger.info("Send worker is up!")
             while True:
-                item_type, data =  await self._send_queue.get()
+                item_type, data = await self._send_queue.get()
 
                 if not self._is_running:
                     self._send_queue.task_done()
@@ -286,7 +256,7 @@ class GeminiLiveSession:
                 try:
                     if item_type == "video":
                         blob = types.Blob(data=data, mime_type="image/jpeg")
-                        logger.warning("Sent videoy!")
+                        logger.info("Sent videoy!")
                         await session.send_realtime_input(media=blob)
 
                     elif item_type == "audio":
@@ -295,25 +265,19 @@ class GeminiLiveSession:
                             data=audio_bytes,
                             mime_type=f"audio/pcm;rate={sample_rate}",
                         )
-                        logger.warning("Sent audioy!")
+                        logger.info("Sent audioy!")
                         await session.send_realtime_input(media=blob)
 
                     elif item_type == "text":
                         text, turn_complete = data
                         await session.send_client_content(
-                            turns=types.Content(
-                                role="user", parts=[types.Part(text=text)]
-                            ),
+                            turns=types.Content(role="user", parts=[types.Part(text=text)]),
                             turn_complete=turn_complete,
                         )
-                        logger.debug(
-                            f"Sent text to Gemini for client {self.client_id}: {text[:50]}"
-                        )
+                        logger.debug(f"Sent text to Gemini for client {self.client_id}: {text[:50]}")
 
                 except Exception as e:
-                    logger.opt(exception=e).error(
-                        f"Error sending {item_type} data for client {self.client_id}"
-                    )
+                    logger.opt(exception=e).error(f"Error sending {item_type} data for client {self.client_id}")
                     self._stop_event.set()  # Trigger a session stop
 
                 self._send_queue.task_done()
@@ -322,9 +286,7 @@ class GeminiLiveSession:
             logger.debug(f"Send loop cancelled for {self.client_id}")
             raise
         except Exception as e:
-            logger.opt(exception=e).error(
-                f"Fatal error in send loop for client {self.client_id}"
-            )
+            logger.opt(exception=e).error(f"Fatal error in send loop for client {self.client_id}")
             self._stop_event.set()
 
     async def _receive_loop(self, session: AsyncSession):
@@ -336,25 +298,17 @@ class GeminiLiveSession:
                         logger.debug(f"Stopping receive loop for client {self.client_id}")
                         break
 
-                    logger.info(
-                        f"Received response from Gemini for client {self.client_id}: {response}"
-                    )
+                    logger.info(f"Received response from Gemini for client {self.client_id}: {response}")
 
                     try:
                         await self._handle_response(response, session)
                     except Exception as e:
-                        logger.opt(exception=e).error(
-                            f"Error handling response for client {self.client_id}"
-                        )
-
+                        logger.opt(exception=e).error(f"Error handling response for client {self.client_id}")
         except asyncio.CancelledError:
             logger.info(f"Receive loop cancelled for client {self.client_id}")
             raise
         except Exception as e:
-            logger.opt(exception=e).error(
-                f"Fatal error in receive loop for client {self.client_id}"
-            )# Trigger a session stop
-            self._stop_event.set()
+            logger.opt(exception=e).error(f"Fatal error in receive loop for client {self.client_id}")
 
     async def _handle_response(self, response, session: AsyncSession):
         """Handles text and tool calls from a session response."""
@@ -375,9 +329,7 @@ class GeminiLiveSession:
             return
 
         for fc in tool_call.function_calls:
-            logger.info(
-                f"Function call from Gemini for client {self.client_id}: {fc.name} with args {fc.args}"
-            )
+            logger.info(f"Function call from Gemini for client {self.client_id}: {fc.name} with args {fc.args}")
 
             try:
                 if fc.name == "change_detection_target":
@@ -399,9 +351,7 @@ class GeminiLiveSession:
                             }
                         )
                 else:
-                    logger.error(
-                        f"Unknown function call from Gemini for client {self.client_id}: {fc.name}"
-                    )
+                    logger.error(f"Unknown function call from Gemini for client {self.client_id}: {fc.name}")
                     await session.send_tool_response(
                         function_responses=types.FunctionResponse(
                             id=fc.id,
@@ -411,9 +361,7 @@ class GeminiLiveSession:
                     )
 
             except Exception as e:
-                logger.opt(exception=e).error(
-                    f"Error executing function call {fc.name} for client {self.client_id}"
-                )
+                logger.opt(exception=e).error(f"Error executing function call {fc.name} for client {self.client_id}")
                 try:
                     await session.send_tool_response(
                         function_responses=types.FunctionResponse(
@@ -423,20 +371,14 @@ class GeminiLiveSession:
                         )
                     )
                 except Exception as se:
-                    logger.opt(exception=se).error(
-                        f"Failed to send tool error response for {self.client_id}"
-                    )
+                    logger.opt(exception=se).error(f"Failed to send tool error response for {self.client_id}")
                     self._stop_event.set()  # Fatal error
 
-    async def _handle_change_detection_target(
-        self, args: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _handle_change_detection_target(self, args: dict[str, Any]) -> dict[str, Any]:
         """Handles the 'change_detection_target' tool call logic."""
         try:
             prompt = args.get("prompt", "person, object")
-            logger.info(
-                f"Gemini requested detection target change for client {self.client_id}: new prompt='{prompt}'"
-            )
+            logger.info(f"Gemini requested detection target change for client {self.client_id}: new prompt='{prompt}'")
 
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(
@@ -452,9 +394,7 @@ class GeminiLiveSession:
             }
 
         except Exception as e:
-            logger.opt(exception=e).error(
-                f"Error changing detection target for client {self.client_id}"
-            )
+            logger.opt(exception=e).error(f"Error changing detection target for client {self.client_id}")
             return {
                 "status": "error",
                 "prompt": self.grounding_detector.get_current_prompt(),
@@ -481,9 +421,7 @@ class GeminiSessionManager:
         """Creates, starts, and stores a new GeminiLiveSession."""
         async with self._lock:
             if client_id in self.sessions:
-                logger.warning(
-                    f"Session already exists for client {client_id}, returning existing session"
-                )
+                logger.warning(f"Session already exists for client {client_id}, returning existing session")
                 return self.sessions[client_id]
 
             session = GeminiLiveSession(
@@ -495,14 +433,10 @@ class GeminiSessionManager:
             try:
                 await session.start(callback=callback, resume_token=resume_token)
                 self.sessions[client_id] = session
-                logger.info(
-                    f"Created Gemini session for client {client_id}. Total active sessions: {len(self.sessions)}"
-                )
+                logger.info(f"Created Gemini session for client {client_id}. Total active sessions: {len(self.sessions)}")
                 return session
             except Exception as e:
-                logger.opt(exception=e).error(
-                    f"Failed to create session for client {client_id}"
-                )
+                logger.opt(exception=e).error(f"Failed to create session for client {client_id}")
                 # Ensure session is cleaned up if start fails
                 await session.stop()
                 raise
@@ -528,9 +462,7 @@ class GeminiSessionManager:
                 await session.stop()
             finally:
                 del self.sessions[client_id]
-                logger.info(
-                    f"Closed Gemini session for client {client_id}. Remaining sessions: {len(self.sessions)}"
-                )
+                logger.info(f"Closed Gemini session for client {client_id}. Remaining sessions: {len(self.sessions)}")
 
     async def close_all_sessions(self):
         logger.info(f"Closing all {len(self.sessions)} active sessions...")
@@ -540,9 +472,7 @@ class GeminiSessionManager:
             try:
                 await self.close_session(client_id)
             except Exception as e:
-                logger.opt(exception=e).error(
-                    f"Error closing session for client {client_id}"
-                )
+                logger.opt(exception=e).error(f"Error closing session for client {client_id}")
 
         logger.info("All Gemini sessions closed")
 
