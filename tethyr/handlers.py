@@ -18,9 +18,12 @@ from .types import (
     BBoxMessage,
     BoundingBox,
     ClientState,
+    GeminiCallback,
     HandshakeAckMessage,
     HandshakeMessage,
     OverlayMessage,
+    PromptChanged,
+    Text,
     VideoFrameMessage,
 )
 from .utils import serialize_server_message
@@ -47,22 +50,18 @@ async def handle_handshake(
     if storage and storage.enabled:
         client_state.output_dir = storage.setup_client_storage(client_state)
 
-    async def handle_gemini_response(response_data: dict):
-        """Handle responses from Gemini and send to client"""
+    async def handle_gemini_response(response_data: GeminiCallback):
         try:
-            if response_data["type"] == "text":
-                # Send text as overlay
-                overlay_msg = OverlayMessage(
-                    type="overlay",
-                    text=response_data["text"],
-                    timestamp=datetime.now().isoformat(),
-                )
-                await client_state.websocket.send(serialize_server_message(overlay_msg))
-
-            elif response_data["type"] == "prompt_changed":
-                # Gemini changed what YOLO should detect
-                # Detection continues automatically with new prompt
-                logger.info(f"Detection target changed for client {client_state.client_id}: " f"{response_data['prompt']}")
+            match response_data:
+                case Text(type="text", text=text, timestamp=timestamp):
+                    overlay_msg = OverlayMessage(
+                        type="overlay",
+                        text=text,
+                        timestamp=timestamp,
+                    )
+                    await client_state.websocket.send(serialize_server_message(overlay_msg))
+                case PromptChanged(type="prompt_changed", prompt=prompt):
+                    logger.info(f"Detection target changed for client {client_state.client_id}: " f"{prompt}")
 
         except Exception as e:
             logger.opt(exception=e).error(f"Error handling Gemini response for client {client_state.client_id}")
@@ -180,10 +179,7 @@ async def handle_audio_chunk(
         if client_state.audio_chunk_count == 0:
             client_state.audio_sample_rate = message.sample_rate
             client_state.audio_channels = message.channels
-            logger.info(
-                f"Audio configuration for client {client_state.client_id}: "
-                f"{message.sample_rate}Hz, {message.channels} channels"
-            )
+            logger.info(f"Audio configuration for client {client_state.client_id}: " f"{message.sample_rate}Hz, {message.channels} channels")
 
         # Buffer audio if storage is enabled
         if storage and storage.enabled:

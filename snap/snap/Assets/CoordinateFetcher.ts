@@ -34,6 +34,9 @@ export class ARStreamingClient extends BaseScriptComponent {
     // WebSocket
     private socket: WebSocket | null = null;
     private isConnected: boolean = false;
+    private isReconnecting: boolean = false;
+    private reconnectDelayMs: number = 1000; // 1 second fixed delay
+    private shouldStayConnected: boolean = true;
 
     @input
     @hint("WebSocket server URL, e.g., ws://192.168.1.100:5001")
@@ -154,47 +157,105 @@ export class ARStreamingClient extends BaseScriptComponent {
     }
 
     private connectWebSocket(): void {
+        if (this.isReconnecting) {
+            return; // Already attempting to reconnect
+        }
+
         print(`Connecting to WebSocket: ${this.serverUrl}`);
 
-        this.socket = this.internetModule.createWebSocket(this.serverUrl);
-        this.socket.binaryType = "blob";
+        try {
+            this.socket = this.internetModule.createWebSocket(this.serverUrl);
+            this.socket.binaryType = "blob";
 
-        this.socket.onopen = (event: WebSocketEvent) => {
-            print("WebSocket connected");
-            this.isConnected = true;
+            this.socket.onopen = (event: WebSocketEvent) => {
+                print("WebSocket connected successfully");
+                this.isConnected = true;
+                this.isReconnecting = false;
 
-            // Send initial handshake
-            this.sendMessage({
-                type: "handshake",
-                timestamp: Date.now(),
-                device: "spectacles",
-                capabilities: {
-                    video: true,
-                    audio: this.microphoneProvider !== null,
-                    audioSource: "microphone",
-                },
-            });
-        };
+                // Send initial handshake
+                this.sendMessage({
+                    type: "handshake",
+                    timestamp: Date.now(),
+                    device: "spectacles",
+                    capabilities: {
+                        video: true,
+                        audio: this.microphoneProvider !== null,
+                        audioSource: "microphone",
+                    },
+                });
+            };
 
-        this.socket.onmessage = async (event: WebSocketMessageEvent) => {
-            await this.handleServerMessage(event);
-        };
+            this.socket.onmessage = async (event: WebSocketMessageEvent) => {
+                await this.handleServerMessage(event);
+            };
 
-        this.socket.onclose = (event: WebSocketCloseEvent) => {
+            this.socket.onclose = (event: WebSocketCloseEvent) => {
+                this.isConnected = false;
+                if (event.wasClean) {
+                    print("WebSocket closed cleanly");
+                } else {
+                    print(
+                        `WebSocket closed with error, code: ${event.code} ${event.reason}`
+                    );
+                }
+
+                // Trigger reconnection if we should stay connected
+                if (this.shouldStayConnected) {
+                    this.scheduleReconnect();
+                }
+            };
+
+            this.socket.onerror = (event: WebSocketEvent) => {
+                print("WebSocket error occurred");
+                this.isConnected = false;
+
+                // Trigger reconnection if we should stay connected
+                if (this.shouldStayConnected) {
+                    this.scheduleReconnect();
+                }
+            };
+        } catch (error) {
+            print(`Error creating WebSocket: ${error}`);
             this.isConnected = false;
-            if (event.wasClean) {
-                print("WebSocket closed cleanly");
-            } else {
-                print(
-                    `WebSocket closed with error, code: ${event.code} ${event.reason}`
-                );
+
+            // Trigger reconnection if we should stay connected
+            if (this.shouldStayConnected) {
+                this.scheduleReconnect();
             }
-        };
+        }
+    }
 
-        this.socket.onerror = (event: WebSocketEvent) => {
-            print("WebSocket error");
-            this.isConnected = false;
-        };
+    private scheduleReconnect(): void {
+        if (this.isReconnecting || !this.shouldStayConnected) {
+            return; // Already reconnecting or should not reconnect
+        }
+
+        this.isReconnecting = true;
+        print(
+            `Scheduling reconnection in ${this.reconnectDelayMs}ms...`
+        );
+
+        // Close existing socket if any
+        if (this.socket) {
+            try {
+                this.socket.close();
+            } catch (error) {
+                print(`Error closing socket: ${error}`);
+            }
+            this.socket = null;
+        }
+
+        // Schedule reconnection after delay
+        const delayedEvent = this.createEvent("DelayedCallbackEvent");
+        (delayedEvent as DelayedCallbackEvent).bind(() => {
+            if (this.shouldStayConnected) {
+                print("Attempting to reconnect...");
+                this.connectWebSocket();
+            }
+        });
+        (delayedEvent as DelayedCallbackEvent).reset(
+            this.reconnectDelayMs / 1000
+        ); // Convert to seconds
     }
 
     private onNewCameraFrame(cameraFrame: CameraFrame): void {
@@ -525,6 +586,10 @@ export class ARStreamingClient extends BaseScriptComponent {
     }
 
     private cleanup(): void {
+        // Stop reconnection attempts
+        this.shouldStayConnected = false;
+        this.isReconnecting = false;
+
         if (this.microphoneProvider) {
             this.microphoneProvider.stop();
         }
@@ -535,5 +600,7 @@ export class ARStreamingClient extends BaseScriptComponent {
 
         // Clean up all bounding boxes
         this.clearAllOverlays();
+
+        print("ARStreamingClient cleanup complete");
     }
 }

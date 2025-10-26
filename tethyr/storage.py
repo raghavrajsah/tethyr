@@ -84,7 +84,7 @@ class StorageMiddleware:
             image.save(frame_path, quality=95)
 
             if frame_number % 30 == 0:  # Log every 30 frames
-                logger.debug(f"Saved frame {frame_number} for client {client_state.client_id}")
+                logger.trace(f"Saved frame {frame_number} for client {client_state.client_id}")
 
         except Exception as e:
             logger.opt(exception=e).error(f"Error saving frame for client {client_state.client_id}")

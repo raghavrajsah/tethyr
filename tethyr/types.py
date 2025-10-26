@@ -113,6 +113,26 @@ class ClearMessage:
 
 ServerMessage = HandshakeAckMessage | OverlayMessage | BBoxMessage | ClearMessage
 
+# ============================================================================
+# Gemini Callback
+# ============================================================================
+
+
+@dataclass
+class PromptChanged:
+    type: Literal["prompt_changed"]
+    prompt: str = ""
+
+
+@dataclass
+class Text:
+    type: Literal["text"]
+    text: str = ""
+    timestamp: str = ""
+    """Timestamp in ISO format"""
+
+
+GeminiCallback = PromptChanged | Text
 
 # ============================================================================
 # CLIENT STATE
