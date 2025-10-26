@@ -10,35 +10,30 @@ from google.genai import types
 from google.genai.live import AsyncSession
 from loguru import logger
 
-from .grounding import GROUNDING_TOOL_DECLARATION, GroundingDetector
-from .slack_tool import SLACK_TOOL_DECLARATION, SlackBot
-from .types import GeminiCallback, PromptChanged, Text
+from .email_supervisor import EMAIL_SUPERVISOR_TOOL_DECLARATION, EmailSupervisor
 
-DEFAULT_SYSTEM_INST = """You are an AI assistant for AR smart glasses helping users with assembly tasks. Specifically,
-if no task is specified, your work will be to help the user assemble a light circuit. The circuit contains a light bulb,
-a resistor, and a battery. WAIT UNTIL THE USER IS READY TO START, FINISHED THE TASK, OR ASK FOR HELP, before you start working and
-give back ANY FORM OF instruction. Literally be silent until the user is asking you to start working.
+# Assuming grounding.py exists in the same directory
+from .grounding import GROUNDING_TOOL_DECLARATION, GroundingDetector
+from .types import GeminiCallback, Text
+
+DEFAULT_SYSTEM_INST = """You are Bob, a helpful assistant for AR smart glasses that assists users with various tasks.
+Your main task is to help the user build or repair objects.
 
 Your role:
 1. Ask the user to point the camera at the object(s) that they want to work on, as well as describe
-what they want to construct/repair
-2. Use change_detection_target tool to change what objects YOLO should detect
-3. Once you identify the object, create a step-by-step plan
-4. Guide the user through each step with clear, concise instructions
-5. Wait for user voice confirmation before moving to the next step
-6. Provide safety warnings when relevant (electrical, construction, etc.)
-7. You can send Slack messages to colleagues if the user needs help from someone else
+what they want to construct/repair.
+2. Use change_detection_target tool to highlight objects that you want the user to focus on.
+3. Once you identify the object, create a step-by-step plan.
+4. Guide the user through each step with clear, concise instructions.
+5. Wait for user voice confirmation before moving to the next step.
+6. Provide safety warnings when relevant (electrical, construction, etc.).
+7. Use request_human_help tool if the task is too complex, dangerous, or the user explicitly asks for human assistance.
 
 Important:
 - Keep instructions brief and actionable (displayed on AR overlay)
-- Use change_detection_target tool to focus detection on relevant repair objects. The object that you are
-  currently focused on is person. Make sure to change the detection target to the object that you are supposed
-  to be working on immediately after you identify the object.
-- Respond to voice commands like "next", "repeat", "help". Feel free to interrupt the user if the user never
-  stopped talking.
-- Be proactive about safety
-- When sending Slack messages, use people's display names (like "John Smith"), not user IDs
-"""
+- Use change_detection_target tool to focus detection on relevant repair objects
+- Respond to voice commands like "next", "repeat", "help". Feel free to interrupt the user if the user never stopped talking.
+- Be proactive about safety"""
 
 
 class GeminiLiveSession:
@@ -48,12 +43,12 @@ class GeminiLiveSession:
         self,
         client_id: str,
         grounding_detector: GroundingDetector,
-        slack_bot: SlackBot | None = None,
+        email_supervisor: EmailSupervisor | None = None,
         system_instruction: str | None = None,
     ):
         self.client_id = client_id
         self.grounding_detector = grounding_detector
-        self.slack_bot = slack_bot
+        self.email_supervisor = email_supervisor or EmailSupervisor()
         self.model = "gemini-live-2.5-flash-preview"
         self._system_instruction = system_instruction
         self._callback: Callable[[GeminiCallback], Any] | None = None
@@ -364,23 +359,14 @@ class GeminiLiveSession:
 
                     if self._callback:
                         await self._callback(
-                            PromptChanged(
-                                type="prompt_changed",
-                                prompt=result.get("prompt", ""),
-                            )
+                            {
+                                "type": "prompt_changed",
+                                "prompt": result.get("prompt", ""),
+                            }
                         )
 
-                elif fc.name == "send_slack_message":
-                    if self.slack_bot:
-                        result = await self.slack_bot.send_message(
-                            recipient_name=fc.args.get("recipient_name", ""),
-                            message=fc.args.get("message", ""),
-                        )
-                    else:
-                        result = {
-                            "status": "error",
-                            "message": "Slack integration not available",
-                        }
+                elif fc.name == "request_human_help":
+                    result = await self._handle_request_human_help(fc.args)
 
                     await session.send_tool_response(
                         function_responses=types.FunctionResponse(
@@ -453,6 +439,32 @@ class GeminiLiveSession:
                 "message": str(e),
             }
 
+    async def _handle_request_human_help(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handles the 'request_human_help' tool call logic."""
+        try:
+            user_request = args.get("user_request", "User needs assistance")
+            context = args.get("context")
+
+            logger.info(f"Gemini requested human help for client {self.client_id}: request='{user_request}'")
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                self.email_supervisor.send_help_request,
+                self.client_id,
+                user_request,
+                context,
+            )
+
+            return result
+
+        except Exception as e:
+            logger.opt(exception=e).error(f"Error requesting human help for client {self.client_id}")
+            return {
+                "status": "error",
+                "message": f"Failed to request help: {str(e)}",
+            }
+
 
     @property
     def _connect_config(self) -> types.LiveConnectConfig:
@@ -466,7 +478,7 @@ class GeminiLiveSession:
         ]
 
         if self.slack_bot and self.slack_bot.is_enabled:
-            tools[0].function_declarations.append(SLACK_TOOL_DECLARATION)
+            tools[0].function_declarations.append(EMAIL_SUPERVISOR_TOOL_DECLARATION)
 
         return types.LiveConnectConfig(
             response_modalities=[types.Modality.TEXT],
@@ -599,14 +611,14 @@ class GeminiSessionManager:
     def __init__(
         self,
         grounding_detector: GroundingDetector | None = None,
-        slack_bot: SlackBot | None = None,
+        email_supervisor: EmailSupervisor | None = None,
     ):
         self.sessions: dict[str, GeminiLiveSession] = {}
         self.grounding_detector = grounding_detector or GroundingDetector()
-        self.slack_bot = slack_bot or SlackBot()
+        self.email_supervisor = email_supervisor or EmailSupervisor()
         self._lock = asyncio.Lock()
         logger.info(
-            "Initialized GeminiSessionManager with shared grounding detector and slack bot"
+            "Initialized GeminiSessionManager with shared grounding detector and email supervisor"
         )
 
     async def create_session(
@@ -627,7 +639,7 @@ class GeminiSessionManager:
             session = GeminiLiveSession(
                 client_id=client_id,
                 grounding_detector=self.grounding_detector,
-                slack_bot=self.slack_bot,
+                email_supervisor=self.email_supervisor,
                 system_instruction=system_instruction,
             )
 
