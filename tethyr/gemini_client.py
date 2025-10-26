@@ -9,7 +9,7 @@ from google.genai import types
 from google.genai.live import AsyncSession
 from loguru import logger
 
-# Assuming grounding.py exists in the same directory
+from .email_supervisor import EMAIL_SUPERVISOR_TOOL_DECLARATION, EmailSupervisor
 from .grounding import GROUNDING_TOOL_DECLARATION, GroundingDetector
 
 DEFAULT_SYSTEM_INST = """You are an AI assistant for AR smart glasses helping users with construction tasks
@@ -22,12 +22,14 @@ what they want to construct/repair
 4. Guide the user through each step with clear, concise instructions
 5. Wait for user voice confirmation before moving to the next step
 6. Provide safety warnings when relevant (electrical, construction, etc.)
+7. Use request_human_help tool if the task is too complex, dangerous, or the user explicitly asks for human assistance
 
 Important:
 - Keep instructions brief and actionable (displayed on AR overlay)
 - Use change_detection_target tool to focus detection on relevant repair objects
 - Respond to voice commands like "next", "repeat", "help". Feel free to interrupt the user if the user never stopped talking.
-- Be proactive about safety"""
+- Be proactive about safety
+- Escalate to human supervisor when appropriate using request_human_help tool"""
 
 
 class GeminiLiveSession:
@@ -37,10 +39,12 @@ class GeminiLiveSession:
         self,
         client_id: str,
         grounding_detector: GroundingDetector,
+        email_supervisor: EmailSupervisor,
         system_instruction: str | None = None,
     ):
         self.client_id = client_id
         self.grounding_detector = grounding_detector
+        self.email_supervisor = email_supervisor
         self.model = "gemini-live-2.5-flash-preview"
         self._system_instruction = system_instruction
         self._callback: Callable[[dict[str, Any]], Any] | None = None
@@ -74,7 +78,7 @@ class GeminiLiveSession:
             config: types.LiveConnectConfigOrDict = {
                 "response_modalities": [types.Modality.TEXT],
                 "system_instruction": system_instruction,
-                "tools": [{"function_declarations": [GROUNDING_TOOL_DECLARATION]}],
+                "tools": [{"function_declarations": [GROUNDING_TOOL_DECLARATION, EMAIL_SUPERVISOR_TOOL_DECLARATION]}],
                 **({"session_session_resumption": {"handle": resume_token}} if resume_token else {}),
             }
 
@@ -347,6 +351,25 @@ class GeminiLiveSession:
                                 "prompt": result.get("prompt", ""),
                             }
                         )
+                elif fc.name == "request_human_help":
+                    result = await self._handle_request_human_help(fc.args)
+
+                    await session.send_tool_response(
+                        function_responses=types.FunctionResponse(
+                            id=fc.id,
+                            name=fc.name,
+                            response=result,
+                        )
+                    )
+
+                    if self._callback:
+                        await self._callback(
+                            {
+                                "type": "human_help_requested",
+                                "status": result.get("status", ""),
+                                "message": result.get("message", ""),
+                            }
+                        )
                 else:
                     logger.error(f"Unknown function call from Gemini for client {self.client_id}: {fc.name}")
                     await session.send_tool_response(
@@ -398,15 +421,46 @@ class GeminiLiveSession:
                 "message": str(e),
             }
 
+    async def _handle_request_human_help(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Handles the 'request_human_help' tool call logic."""
+        try:
+            user_request = args.get("user_request", "User needs assistance")
+            context = args.get("context")
+
+            logger.info(f"Gemini requested human help for client {self.client_id}: request='{user_request}'")
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                self.email_supervisor.send_help_request,
+                self.client_id,
+                user_request,
+                context,
+            )
+
+            return result
+
+        except Exception as e:
+            logger.opt(exception=e).error(f"Error requesting human help for client {self.client_id}")
+            return {
+                "status": "error",
+                "message": f"Failed to request help: {str(e)}",
+            }
+
 
 class GeminiSessionManager:
     """Manages multiple Gemini Live sessions for different clients"""
 
-    def __init__(self, grounding_detector: GroundingDetector | None = None):
+    def __init__(
+        self,
+        grounding_detector: GroundingDetector | None = None,
+        email_supervisor: EmailSupervisor | None = None,
+    ):
         self.sessions: dict[str, GeminiLiveSession] = {}
         self.grounding_detector = grounding_detector or GroundingDetector()
+        self.email_supervisor = email_supervisor or EmailSupervisor()
         self._lock = asyncio.Lock()
-        logger.info("Initialized GeminiSessionManager with shared grounding detector")
+        logger.info("Initialized GeminiSessionManager with shared grounding detector and email supervisor")
 
     async def create_session(
         self,
@@ -424,6 +478,7 @@ class GeminiSessionManager:
             session = GeminiLiveSession(
                 client_id=client_id,
                 grounding_detector=self.grounding_detector,
+                email_supervisor=self.email_supervisor,
                 system_instruction=system_instruction,
             )
 
