@@ -653,10 +653,8 @@
   ScriptInputs:
     "":
       microphoneAudio: !<reference.AudioTrackAsset> 61f3ff7e-715b-4a6c-be3c-f60de8cd182c
-      prerecordedAudio: !<reference.AudioTrackAsset> 4e252334-639e-4e88-831e-d571cc31964f
-      audioComponent: !<reference.AudioComponent> cf302a60-4f37-4ca8-ad4c-b66dbef6f3ae
       serverUrl: "ws://172.20.0.231:5001"
-      overlayText: !<reference.Text> fa02cb47-f9c7-40f8-a716-237aadd346ee
+      overlayText: !<reference.Text> 2de61abd-8179-4d7d-9be5-f980adc21456
       boundBoxPrefab: !<reference.ObjectPrefab> aa5e1187-ca9a-4d03-8d70-df47710089d4
       bboxParent: !<reference.SceneObject> 7c8f3e99-944a-4fae-b839-f2c2f6b417f9
       videoFrameSkip: !<float> 15.000000
