@@ -40,7 +40,7 @@ export class ARStreamingClient extends BaseScriptComponent {
 
     @input
     @hint("WebSocket server URL, e.g., ws://192.168.1.100:5001")
-    serverUrl: string = "ws://172.20.0.231:5001";
+    serverUrl: string = "ws://172.20.4.40:5001";
 
     // UI Elements
     @input
@@ -434,7 +434,6 @@ export class ARStreamingClient extends BaseScriptComponent {
         if (this.overlayText && message.text) {
             this.overlayText.text = message.text;
             print(`Overlay updated: ${message.text}`);
-
             // Optional: apply styling if provided
             if (message.color) {
                 const color = message.color;
@@ -445,7 +444,7 @@ export class ARStreamingClient extends BaseScriptComponent {
                     color.a
                 );
             }
-
+            
             // Optional: apply positioning if provided
             if (message.position && this.overlayText.getSceneObject()) {
                 const screenTransform = this.overlayText
@@ -455,7 +454,7 @@ export class ARStreamingClient extends BaseScriptComponent {
                     ) as ScreenTransform;
                 if (screenTransform) {
                     screenTransform.anchors.setCenter(
-                        new vec2(message.position.x, message.position.y)
+                        new vec2(message.x, message.y)
                     );
                 }
             }
@@ -466,7 +465,6 @@ export class ARStreamingClient extends BaseScriptComponent {
         if (!message.bbox) {
             return;
         }
-
         const bbox = message.bbox;
         const frameNumber = message.frame_number || this.frameCounter;
         

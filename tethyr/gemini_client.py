@@ -14,6 +14,8 @@ from .email_supervisor import EMAIL_SUPERVISOR_TOOL_DECLARATION, EmailSupervisor
 
 # Assuming grounding.py exists in the same directory
 from .grounding import GROUNDING_TOOL_DECLARATION, GroundingDetector
+from .scratchpad import ScratchpadManager
+from .scratchpad_tools import SCRATCHPAD_TOOL_DECLARATIONS
 from .types import GeminiCallback, Text
 
 DEFAULT_SYSTEM_INST = """You are Bob, a helpful assistant for AR smart glasses that assists users with various tasks.
@@ -21,19 +23,30 @@ Your main task is to help the user build or repair objects.
 
 Your role:
 1. Ask the user to point the camera at the object(s) that they want to work on, as well as describe
-what they want to construct/repair.
-2. Use change_detection_target tool to highlight objects that you want the user to focus on.
-3. Once you identify the object, create a step-by-step plan.
-4. Guide the user through each step with clear, concise instructions.
-5. Wait for user voice confirmation before moving to the next step.
-6. Provide safety warnings when relevant (electrical, construction, etc.).
-7. Use request_human_help tool if the task is too complex, dangerous, or the user explicitly asks for human assistance.
+what they want. 
+2. At the beginning of the task, you need to create a step-by-step plan for the user to complete the task. Use your scratchpad to keep track of the plan and current step.
+4. Use change_detection_target tool to change what objects YOLO should detect. You can SPECIFY multiple obejcts. You SHOULD ALWAYS CHANGE THE DETECTION TARGET TO THE OBJECT THAT YOU ARE SUPPOSED TO BE WORKING ON IMMEDIATELY AFTER YOU IDENTIFY THE OBJECT.
+5. Once you identify the object tell the user how to manipulate that object. The YOLO tools purpose is to highlight what the user is supposed to manipulate.
+6. Guide the user through each step with clear, concise instructions
+7. Answer any questions the user has about the task or the plan.
+7. Update your scratchpad as you progress through steps.
+8. Wait for user voice confirmation before moving to the next step
+9. Provide safety warnings when relevant (electrical, construction, etc.)
 
 Important:
-- Keep instructions brief and actionable (displayed on AR overlay)
-- Use change_detection_target tool to focus detection on relevant repair objects
+- Keep instructions brief and actionable, be very patient with the user as they work through steps
+- You may ONLY HAVE UP TO 20 words EVERY 10 seconds in the AR overlay. SHUTUP and don't YAP. DO NOT USE long sentence or complex markdown, they are NOT RENDERED!
+- Remember that the user may not understand very simple things! Like stripping wires  
+- Use the change_detection_target tool which employs YOLO to highlight the objects that the user is supposed to be working on or asks to be highlighted.
 - Respond to voice commands like "next", "repeat", "help". Feel free to interrupt the user if the user never stopped talking.
-- Be proactive about safety"""
+- Be proactive about safety
+
+TOOLS:
+- Use write_scratchpad to keep track of your plan and current progress
+- Use read_scratchpad before responding to check where you are in the plan
+- Use change_detection_target tool to change what objects YOLO should detect
+"""
+# - Be mindful of user readability given that you only have about 4 sentences of display space on the AR overlay (which you can overwrite of course).
 
 
 class GeminiLiveSession:
@@ -43,11 +56,13 @@ class GeminiLiveSession:
         self,
         client_id: str,
         grounding_detector: GroundingDetector,
+        scratchpad_manager: ScratchpadManager,
         email_supervisor: EmailSupervisor | None = None,
         system_instruction: str | None = None,
     ):
         self.client_id = client_id
         self.grounding_detector = grounding_detector
+        self.scratchpad_manager = scratchpad_manager
         self.email_supervisor = email_supervisor or EmailSupervisor()
         self.model = "gemini-live-2.5-flash-preview"
         self._system_instruction = system_instruction
@@ -383,6 +398,17 @@ class GeminiLiveSession:
                         )
                     )
 
+                elif fc.name in ["read_scratchpad", "write_scratchpad", "append_scratchpad", "clear_scratchpad"]:
+                    result = await self._handle_scratchpad_tool(fc.name, fc.args)
+
+                    await session.send_tool_response(
+                        function_responses=types.FunctionResponse(
+                            id=fc.id,
+                            name=fc.name,
+                            response=result,
+                        )
+                    )
+
                 else:
                     logger.error(
                         f"Unknown function call from Gemini for client {self.client_id}: {fc.name}"
@@ -476,6 +502,69 @@ class GeminiLiveSession:
                 "message": f"Failed to request help: {str(e)}",
             }
 
+    async def _handle_scratchpad_tool(
+        self, tool_name: str, args: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Handles scratchpad tool calls (read, write, append, clear)."""
+        try:
+            scratchpad = self.scratchpad_manager.get_scratchpad(self.client_id)
+
+            if tool_name == "read_scratchpad":
+                content = scratchpad.read()
+                logger.info(
+                    f"Gemini read scratchpad for client {self.client_id}: {len(content)} chars"
+                )
+                return {
+                    "status": "success",
+                    "content": content,
+                    "is_empty": scratchpad.is_empty(),
+                }
+
+            elif tool_name == "write_scratchpad":
+                content = args.get("content", "")
+                scratchpad.write(content)
+                logger.info(
+                    f"Gemini wrote to scratchpad for client {self.client_id}: {len(content)} chars"
+                )
+                return {
+                    "status": "success",
+                    "message": f"Wrote {len(content)} characters to scratchpad",
+                }
+
+            elif tool_name == "append_scratchpad":
+                content = args.get("content", "")
+                scratchpad.append(content)
+                logger.info(
+                    f"Gemini appended to scratchpad for client {self.client_id}: {len(content)} chars"
+                )
+                return {
+                    "status": "success",
+                    "message": f"Appended {len(content)} characters to scratchpad",
+                }
+
+            elif tool_name == "clear_scratchpad":
+                scratchpad.clear()
+                logger.info(f"Gemini cleared scratchpad for client {self.client_id}")
+                return {
+                    "status": "success",
+                    "message": "Scratchpad cleared",
+                }
+
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Unknown scratchpad tool: {tool_name}",
+                }
+
+        except Exception as e:
+            logger.opt(exception=e).error(
+                f"Error handling scratchpad tool {tool_name} for client {self.client_id}"
+            )
+            return {
+                "status": "error",
+                "message": str(e),
+            }
+
     @property
     def _connect_config(self) -> types.LiveConnectConfig:
         system_instruction = self._system_instruction or DEFAULT_SYSTEM_INST
@@ -484,6 +573,7 @@ class GeminiLiveSession:
             types.Tool(
                 function_declarations=[
                     GROUNDING_TOOL_DECLARATION,
+                    *SCRATCHPAD_TOOL_DECLARATIONS,
                     EMAIL_SUPERVISOR_TOOL_DECLARATION,
                 ],
             ),
@@ -635,9 +725,10 @@ class GeminiSessionManager:
         self.sessions: dict[str, GeminiLiveSession] = {}
         self.grounding_detector = grounding_detector or GroundingDetector()
         self.email_supervisor = email_supervisor or EmailSupervisor()
+        self.scratchpad_manager = ScratchpadManager()
         self._lock = asyncio.Lock()
         logger.info(
-            "Initialized GeminiSessionManager with shared grounding detector and email supervisor"
+            "Initialized GeminiSessionManager with shared grounding detector, email supervisor, and scratchpad manager"
         )
 
     async def create_session(
@@ -658,6 +749,7 @@ class GeminiSessionManager:
             session = GeminiLiveSession(
                 client_id=client_id,
                 grounding_detector=self.grounding_detector,
+                scratchpad_manager=self.scratchpad_manager,
                 email_supervisor=self.email_supervisor,
                 system_instruction=system_instruction,
             )

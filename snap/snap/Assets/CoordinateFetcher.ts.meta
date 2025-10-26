@@ -43,7 +43,7 @@
     []
   DefaultScriptInputs:
     - microphoneAudio: !<reference.AudioTrackAsset> 00000000-0000-0000-0000-000000000000
-      serverUrl: "http://localhost:5000"
+      serverUrl: "http://localhost:5001"
       overlayText: !<reference.Text> 00000000-0000-0000-0000-000000000000
       boundBoxPrefab: !<reference.ObjectPrefab> 00000000-0000-0000-0000-000000000000
       bboxParent: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
